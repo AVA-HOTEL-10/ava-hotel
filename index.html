@@ -1,0 +1,1872 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AVA | Sistema de Gestión</title>
+  <meta name="description" content="AVA Sistema de Gestión para hoteles y negocios" />
+
+  <!-- Firebase SDK v9 compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- UI Libraries -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --surface-2: #f0f4f8;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --primary: #2563eb;
+      --primary-2: #1d4ed8;
+      --accent: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --info: #06b6d4;
+      --shadow: 0 18px 45px rgba(15, 23, 42, .08);
+      --radius: 18px;
+      --sidebar: #0f172a;
+      --sidebar-text: #cbd5e1;
+      --sidebar-active: #1e293b;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #0b1220;
+      --surface: #111827;
+      --surface-2: #182235;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --line: #24324a;
+      --primary: #60a5fa;
+      --primary-2: #3b82f6;
+      --accent: #34d399;
+      --danger: #fb7185;
+      --warning: #fbbf24;
+      --info: #22d3ee;
+      --shadow: 0 18px 45px rgba(0,0,0,.26);
+      --sidebar: #020617;
+      --sidebar-text: #cbd5e1;
+      --sidebar-active: #111827;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; }
+
+    .hidden { display: none !important; }
+    .app-shell { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+
+    .login-screen {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(16,185,129,.18), transparent 32%),
+        var(--bg);
+    }
+    .login-card {
+      width: min(460px, 100%);
+      padding: 34px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+    }
+    .brand-row { display:flex; align-items:center; gap:14px; margin-bottom: 22px; }
+    .brand-mark {
+      width: 52px; height: 52px; border-radius: 16px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: white; display:grid; place-items:center; font-weight: 900; letter-spacing: .08em;
+      box-shadow: 0 12px 24px rgba(37,99,235,.25);
+    }
+    .brand-title { margin:0; font-size: 29px; line-height:1; letter-spacing:-.04em; }
+    .brand-sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+    .sidebar {
+      background: var(--sidebar);
+      color: var(--sidebar-text);
+      padding: 20px 16px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .sidebar .brand-row { margin-bottom: 22px; }
+    .sidebar .brand-title { color: white; font-size: 24px; }
+    .nav { display:flex; flex-direction:column; gap:6px; }
+    .nav-btn {
+      width:100%; border:0; background:transparent; color:var(--sidebar-text);
+      display:flex; align-items:center; gap:12px; padding:12px 12px; border-radius:14px;
+      text-align:left; transition:.2s ease; font-weight: 650;
+    }
+    .nav-btn svg { width:18px; height:18px; }
+    .nav-btn:hover { background:rgba(255,255,255,.08); color:#fff; transform: translateX(2px); }
+    .nav-btn.active { background:var(--sidebar-active); color:#fff; box-shadow: inset 3px 0 0 var(--primary); }
+
+    .main { min-width:0; }
+    .topbar {
+      height: 74px; display:flex; align-items:center; justify-content:space-between; gap:16px;
+      padding: 0 26px; background: color-mix(in srgb, var(--surface) 90%, transparent);
+      border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; backdrop-filter: blur(14px);
+    }
+    .top-left { display:flex; flex-direction:column; gap:2px; }
+    .page-kicker { color:var(--muted); font-size: 13px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; }
+    .page-heading { margin:0; font-size: 21px; letter-spacing:-.02em; }
+    .top-actions { display:flex; align-items:center; gap:10px; }
+    .user-chip { display:flex; align-items:center; gap:8px; padding:9px 12px; border:1px solid var(--line); border-radius:999px; background:var(--surface); color:var(--muted); font-size:13px; }
+
+    .content { padding: 26px; }
+    .section-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom: 18px; }
+    .section-head h2 { margin:0 0 6px; font-size: 28px; letter-spacing:-.04em; }
+    .section-head p { margin:0; color:var(--muted); }
+
+    .grid { display:grid; gap:16px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .metric-card { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; min-height:120px; }
+    .metric-card .metric-title { color:var(--muted); font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:.06em; }
+    .metric-card .metric-value { margin-top:8px; font-size:25px; font-weight:900; letter-spacing:-.04em; }
+    .icon-bubble { width:44px; height:44px; display:grid; place-items:center; border-radius:15px; background: var(--surface-2); color: var(--primary); }
+
+    .form-grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:14px; align-items:end; }
+    .form-grid.two { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .form-grid.three { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .form-grid .full { grid-column: 1 / -1; }
+    .field { display:flex; flex-direction:column; gap:7px; position:relative; }
+    label { color:var(--muted); font-weight:750; font-size:13px; }
+    input, select, textarea {
+      width:100%; border:1px solid var(--line); background:var(--surface); color:var(--text);
+      border-radius:13px; padding:12px 13px; outline:none; transition:.18s ease;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent); }
+    input[readonly] { background: var(--surface-2); color: var(--muted); }
+
+    .btn {
+      border:0; border-radius:13px; padding:12px 15px; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      font-weight:800; transition:.18s ease; white-space:nowrap;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background:var(--primary); color:white; }
+    .btn-primary:hover { background:var(--primary-2); }
+    .btn-soft { background:var(--surface-2); color:var(--text); border:1px solid var(--line); }
+    .btn-danger { background: color-mix(in srgb, var(--danger) 14%, var(--surface)); color:var(--danger); border:1px solid color-mix(in srgb, var(--danger) 25%, transparent); }
+    .btn-success { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color:var(--accent); border:1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+    .btn-warning { background: color-mix(in srgb, var(--warning) 16%, var(--surface)); color:var(--warning); border:1px solid color-mix(in srgb, var(--warning) 25%, transparent); }
+    .btn-sm { padding:8px 10px; border-radius:10px; font-size:12px; }
+
+    .table-wrap { width:100%; overflow:auto; border:1px solid var(--line); border-radius:16px; }
+    table { width:100%; border-collapse:collapse; min-width: 760px; }
+    thead { background:var(--surface-2); }
+    th, td { padding:13px 14px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+    th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.07em; }
+    td { font-size:14px; }
+    tr:last-child td { border-bottom:0; }
+
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 10px; font-weight:800; font-size:12px; border:1px solid var(--line); background:var(--surface-2); }
+    .pill.green { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+    .pill.red { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+    .pill.yellow { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, var(--surface)); }
+    .muted { color:var(--muted); }
+    .mini { font-size:12px; color:var(--muted); }
+    .amount { font-variant-numeric: tabular-nums; font-weight:850; }
+
+    .toolbar { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin-bottom: 16px; }
+    .toolbar .field { min-width: 180px; }
+    .totalizer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-radius:16px; background:var(--surface-2); margin: 16px 0; }
+    .totalizer strong { font-size: 20px; }
+
+    .suggestions {
+      position:absolute; top: calc(100% + 4px); left:0; right:0; z-index:60; background:var(--surface); border:1px solid var(--line);
+      border-radius:14px; box-shadow: var(--shadow); max-height:220px; overflow:auto; display:none;
+    }
+    .suggestions.show { display:block; }
+    .suggestion-item { padding:11px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+    .suggestion-item:last-child { border-bottom:0; }
+    .suggestion-item:hover { background:var(--surface-2); }
+
+    .notice { padding:12px 14px; border-radius:14px; border:1px solid color-mix(in srgb, var(--info) 25%, transparent); background: color-mix(in srgb, var(--info) 12%, var(--surface)); color: var(--text); }
+    .toast-wrap { position:fixed; right:18px; bottom:18px; z-index:9999; display:flex; flex-direction:column; gap:10px; }
+    .toast { background:var(--surface); color:var(--text); border:1px solid var(--line); box-shadow:var(--shadow); border-radius:14px; padding:12px 14px; display:flex; align-items:center; gap:10px; min-width:260px; animation: slideIn .22s ease; }
+    .toast.success { border-left:4px solid var(--accent); }
+    .toast.error { border-left:4px solid var(--danger); }
+    @keyframes slideIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+    .room-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(190px,1fr)); gap:16px; }
+    .room-card { border:1px solid var(--line); border-radius:18px; padding:17px; background:var(--surface); box-shadow: var(--shadow); transition:.18s ease; cursor:pointer; }
+    .room-card:hover { transform: translateY(-2px); }
+    .room-card.free { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+    .room-card.busy { border-color: color-mix(in srgb, var(--danger) 25%, var(--line)); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+    .room-card.alert { border-color: color-mix(in srgb, var(--warning) 40%, var(--line)); background: color-mix(in srgb, var(--warning) 14%, var(--surface)); }
+    .room-title { font-size: 22px; font-weight: 900; margin-bottom: 10px; }
+
+    .modal-backdrop { position:fixed; inset:0; display:grid; place-items:center; background: rgba(2,6,23,.55); z-index:1000; padding:20px; }
+    .modal { width:min(560px,100%); background:var(--surface); border:1px solid var(--line); border-radius:22px; box-shadow: var(--shadow); padding:22px; }
+    .modal h3 { margin:0 0 8px; font-size: 23px; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; flex-wrap:wrap; }
+
+    .progress { height:13px; border-radius:999px; background:var(--surface-2); overflow:hidden; border:1px solid var(--line); }
+    .progress > span { display:block; height:100%; width:0%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition:.3s ease; }
+
+    .empty-state { padding: 34px; text-align:center; color:var(--muted); }
+    .mobile-nav-toggle { display:none; }
+    .check-save { color:var(--accent); font-weight:900; opacity:0; transition:.2s ease; }
+    .check-save.show { opacity:1; }
+
+    @media (max-width: 1100px) {
+      .grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .grid-3 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .form-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 860px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar { position:fixed; z-index:200; left:0; top:0; bottom:0; width:280px; transform: translateX(-104%); transition:.25s ease; }
+      .sidebar.open { transform: translateX(0); }
+      .mobile-nav-toggle { display:inline-flex; }
+      .topbar { padding:0 16px; }
+      .content { padding: 18px; }
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      .form-grid, .form-grid.two, .form-grid.three { grid-template-columns: 1fr; }
+      .section-head { flex-direction:column; }
+      .user-chip { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="brand-row">
+        <div class="brand-mark">AVA</div>
+        <div>
+          <h1 class="brand-title">AVA</h1>
+          <p class="brand-sub">Sistema de gestión hotelera y comercial</p>
+        </div>
+      </div>
+      <form id="loginForm" class="grid" style="gap:14px">
+        <div class="field">
+          <label for="loginEmail">Correo electrónico</label>
+          <input id="loginEmail" type="email" autocomplete="email" required placeholder="usuario@empresa.com" />
+        </div>
+        <div class="field">
+          <label for="loginPassword">Contraseña</label>
+          <input id="loginPassword" type="password" autocomplete="current-password" required placeholder="••••••••" />
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="log-in"></i> Iniciar sesión</button>
+        <p id="loginMsg" class="mini"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark">AVA</div>
+        <div>
+          <h1 class="brand-title">AVA</h1>
+          <p class="brand-sub">Gestión en tiempo real</p>
+        </div>
+      </div>
+      <nav id="nav" class="nav"></nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="openSidebar" class="btn btn-soft mobile-nav-toggle" type="button"><i data-lucide="menu"></i></button>
+        <div class="top-left">
+          <span class="page-kicker" id="pageKicker">Panel</span>
+          <h2 class="page-heading" id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="top-actions">
+          <span class="user-chip"><i data-lucide="user-round"></i><span id="userEmail"></span> · <b id="userRole"></b></span>
+          <button id="themeToggle" class="btn btn-soft" type="button" title="Cambiar tema"><i data-lucide="moon-star"></i></button>
+          <button id="logoutBtn" class="btn btn-danger" type="button"><i data-lucide="log-out"></i> Salir</button>
+        </div>
+      </header>
+      <section id="content" class="content"></section>
+    </main>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toastWrap" class="toast-wrap"></div>
+
+<script>
+/* ============================================================
+   AVA - SISTEMA DE GESTIÓN
+   HTML único autocontenido + Firebase Firestore en tiempo real
+   ============================================================ */
+
+/* =========================
+   1. CONFIGURACIÓN FIREBASE
+   ========================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyDf_m9qQZRFx-3zee3WFcSssRJ-_zG89yA",
+  authDomain: "ava-hotel-d3213.firebaseapp.com",
+  projectId: "ava-hotel-d3213",
+  storageBucket: "ava-hotel-d3213.firebasestorage.app",
+  messagingSenderId: "1062400302863",
+  appId: "1:1062400302863:web:ed62ccebd0d1946697687a",
+  measurementId: "G-08V8EXFP5B"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const FV = firebase.firestore.FieldValue;
+
+/* =========================
+   2. ESTADO GLOBAL Y CONSTANTES
+   ========================= */
+const ADMIN_PASSWORD = 'avaadmin10';
+const FILTER_PASSWORDS = ['avaadmin10', 'adminava10'];
+
+const PRODUCT_TYPES = ['Producto Venta', 'Producto Insumo', 'Producto Activo Fijo', 'Producto Limpieza'];
+const UNITS = ['Und', 'Gr', 'Lb', 'Kg', 'Lt', 'Ml'];
+const PAYMENT_METHODS = ['Efectivo', 'Nequi', 'Transferencia', 'Tarjeta'];
+
+const SECTIONS = [
+  { id:'dashboard', label:'Dashboard', icon:'layout-dashboard', roles:['administrador'] },
+  { id:'habitaciones', label:'Habitaciones', icon:'bed-double', roles:['administrador'] },
+  { id:'clientes', label:'Clientes', icon:'users', roles:['administrador','trabajador'] },
+  { id:'registro-huespedes', label:'Registro de Huéspedes', icon:'clipboard-plus', roles:['administrador'] },
+  { id:'historial-registros', label:'Historial de Registros', icon:'history', roles:['administrador'] },
+  { id:'facturacion', label:'Facturación', icon:'receipt', roles:['administrador','trabajador'] },
+  { id:'ventas', label:'Ventas', icon:'trending-up', roles:['administrador','trabajador'] },
+  { id:'ingreso-compras', label:'Ingreso de Compras', icon:'shopping-bag', roles:['administrador'] },
+  { id:'historial-compras', label:'Historial de Compras', icon:'list-checks', roles:['administrador'] },
+  { id:'ingreso-gastos', label:'Ingreso de Gastos', icon:'wallet-cards', roles:['administrador','trabajador'] },
+  { id:'historial-gastos', label:'Historial de Gastos', icon:'file-minus', roles:['administrador'] },
+  { id:'inventario', label:'Inventario', icon:'boxes', roles:['administrador'] },
+  { id:'productos', label:'Productos', icon:'package-search', roles:['administrador'] },
+  { id:'servicios', label:'Servicios', icon:'concierge-bell', roles:['administrador'] },
+  { id:'cartera', label:'Cartera', icon:'hand-coins', roles:['administrador'] }
+];
+
+let currentUser = null;
+let currentRole = null;
+let activeSection = null;
+let activeUnsubs = [];
+let activeIntervals = [];
+let chartInstances = {};
+let filterUnlocked = {};
+
+/* =========================
+   3. UTILIDADES GENERALES
+   ========================= */
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+const serverNow = () => FV.serverTimestamp();
+const isAdmin = () => currentRole === 'administrador';
+const canAccess = id => {
+  const section = SECTIONS.find(s => s.id === id);
+  return !!section && section.roles.includes(currentRole);
+};
+
+function initIcons() {
+  if (window.lucide) lucide.createIcons();
+}
+
+function money(value) {
+  const n = Number(value || 0);
+  return new Intl.NumberFormat('es-CO', {
+    style:'currency', currency:'COP', minimumFractionDigits:0, maximumFractionDigits:2
+  }).format(n);
+}
+
+function parseMoney(value) {
+  if (typeof value === 'number') return value;
+  return Number(String(value || '').replace(/[^0-9.-]/g, '')) || 0;
+}
+
+function safeNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function localDateInput(date = new Date()) {
+  const d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return d.toISOString().slice(0,10);
+}
+
+function localDateTime(date = new Date()) {
+  return new Intl.DateTimeFormat('es-CO', {
+    dateStyle: 'medium', timeStyle: 'short'
+  }).format(date);
+}
+
+function normalizeDocId(text) {
+  const base = String(text || '')
+    .trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 140);
+  return base || ('item-' + Date.now());
+}
+
+function getDocDate(data) {
+  const raw = data.fecha || data.createdAt || data.updatedAt;
+  if (!raw) return null;
+  if (raw.toDate) return raw.toDate();
+  return new Date(raw);
+}
+
+function inDateRange(data, start, end) {
+  const d = getDocDate(data);
+  if (!d || Number.isNaN(d.getTime())) return false;
+  const from = new Date(start + 'T00:00:00');
+  const to = new Date(end + 'T23:59:59.999');
+  return d >= from && d <= to;
+}
+
+function daysInMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function escapeHtml(text) {
+  return String(text ?? '').replace(/[&<>'"]/g, ch => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#039;', '"':'&quot;'
+  }[ch]));
+}
+
+function toast(message, type='success') {
+  const wrap = $('#toastWrap');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<i data-lucide="${type === 'error' ? 'circle-alert' : 'circle-check'}"></i><span>${escapeHtml(message)}</span>`;
+  wrap.appendChild(el);
+  initIcons();
+  setTimeout(() => el.remove(), 3600);
+}
+
+function showError(err, fallback='Ocurrió un error') {
+  console.error(err);
+  toast(err?.message || fallback, 'error');
+}
+
+function confirmPassword(kind='admin') {
+  const entered = prompt('Ingresa la contraseña de autorización:');
+  if (kind === 'filter') return FILTER_PASSWORDS.includes(entered || '');
+  return entered === ADMIN_PASSWORD;
+}
+
+function setupLiveClock(root=document) {
+  const update = () => $$('.live-now', root).forEach(el => el.value = localDateTime(new Date()));
+  update();
+  const interval = setInterval(update, 1000);
+  activeIntervals.push(interval);
+}
+
+function addUnsub(unsub) { activeUnsubs.push(unsub); }
+function cleanupActive() {
+  activeUnsubs.forEach(u => { try { u(); } catch(e) {} });
+  activeUnsubs = [];
+  activeIntervals.forEach(i => clearInterval(i));
+  activeIntervals = [];
+  Object.values(chartInstances).forEach(ch => { try { ch.destroy(); } catch(e) {} });
+  chartInstances = {};
+}
+
+function sectionIntro(title, subtitle='') {
+  return `<div class="section-head"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p></div></div>`;
+}
+
+function emptyState(message='No hay registros para mostrar.') {
+  return `<div class="empty-state"><i data-lucide="inbox"></i><p>${escapeHtml(message)}</p></div>`;
+}
+
+function setContent(html) {
+  $('#content').innerHTML = html;
+  initIcons();
+}
+
+function bindAutocomplete(input, box, itemsSource, getText, onSelect) {
+  const render = () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { box.classList.remove('show'); box.innerHTML=''; return; }
+    const items = typeof itemsSource === 'function' ? itemsSource() : itemsSource;
+    const seen = new Set();
+    const matches = (items || [])
+      .filter(item => getText(item).toLowerCase().includes(q))
+      .filter(item => {
+        const k = getText(item).toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .slice(0, 9);
+    box.innerHTML = matches.map((item, idx) => `<div class="suggestion-item" data-idx="${idx}">${escapeHtml(getText(item))}</div>`).join('');
+    box.classList.toggle('show', matches.length > 0);
+    $$('.suggestion-item', box).forEach(el => {
+      el.addEventListener('mousedown', ev => {
+        ev.preventDefault();
+        const item = matches[Number(el.dataset.idx)];
+        onSelect(item);
+        box.classList.remove('show');
+      });
+    });
+  };
+  input.addEventListener('input', render);
+  input.addEventListener('focus', render);
+  input.addEventListener('blur', () => setTimeout(() => box.classList.remove('show'), 120));
+}
+
+function renderDateToolbar(sectionId, withType=false) {
+  const today = localDateInput();
+  return `
+    <div class="toolbar" data-section-filter="${sectionId}">
+      <div class="field"><label>Fecha inicio</label><input type="date" id="filterStart" value="${today}" /></div>
+      <div class="field"><label>Fecha fin</label><input type="date" id="filterEnd" value="${today}" /></div>
+      ${withType ? `<div class="field"><label>Tipo de producto</label><select id="filterType"><option value="">Todos</option>${PRODUCT_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>` : ''}
+      <button class="btn btn-soft" type="button" id="resetToday"><i data-lucide="calendar-days"></i> Hoy</button>
+    </div>`;
+}
+
+function bindDateFilterGuard(sectionId, onApply) {
+  const today = localDateInput();
+  const start = $('#filterStart');
+  const end = $('#filterEnd');
+  const type = $('#filterType');
+  const reset = $('#resetToday');
+  const apply = () => {
+    const changingRange = start.value !== today || end.value !== today;
+    if (changingRange && !filterUnlocked[sectionId]) {
+      if (!confirmPassword('filter')) {
+        start.value = today;
+        end.value = today;
+        toast('Rango bloqueado. Contraseña incorrecta.', 'error');
+      } else {
+        filterUnlocked[sectionId] = true;
+        toast('Filtro desbloqueado');
+      }
+    }
+    onApply();
+  };
+  [start, end].forEach(el => el.addEventListener('change', apply));
+  if (type) type.addEventListener('change', onApply);
+  if (reset) reset.addEventListener('click', () => { start.value=today; end.value=today; onApply(); });
+}
+
+function modal(html) {
+  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal">${html}</div></div>`;
+  initIcons();
+}
+function closeModal() { $('#modalRoot').innerHTML = ''; }
+
+async function recomputeProductCost(description) {
+  const productId = normalizeDocId(description);
+  const snap = await db.collection('compras')
+    .where('tipoProducto','==','Producto Venta')
+    .where('descripcion','==',description)
+    .get();
+  let latest = null;
+  snap.forEach(doc => {
+    const data = doc.data();
+    const d = getDocDate(data) || new Date(0);
+    if (!latest || d > latest.date) latest = { date:d, data };
+  });
+  const cost = latest ? safeNumber(latest.data.valorUnitario) : 0;
+  await db.collection('inventario').doc(productId).set({ costoUnitario: cost, updatedAt: serverNow() }, { merge:true });
+  await db.collection('productos').doc(productId).set({ nombre: description, costoUnitario: cost, updatedAt: serverNow() }, { merge:true });
+}
+
+async function restoreInventoryFromItems(items, direction=1) {
+  const batch = db.batch();
+  (items || []).forEach(item => {
+    if ((item.tipoProducto || item.tipo) !== 'Producto Venta') return;
+    const id = item.productId || normalizeDocId(item.descripcion || item.nombre);
+    const ref = db.collection('inventario').doc(id);
+    batch.set(ref, {
+      tipoProducto: 'Producto Venta',
+      descripcion: item.descripcion || item.nombre,
+      stock: FV.increment(direction * safeNumber(item.cantidad)),
+      updatedAt: serverNow()
+    }, { merge:true });
+  });
+  await batch.commit();
+}
+
+function getPaymentDistribution(method1, amount1, split, method2, amount2) {
+  const payments = [];
+  if (safeNumber(amount1) > 0) payments.push({ metodo: method1, monto: safeNumber(amount1) });
+  if (split && safeNumber(amount2) > 0) payments.push({ metodo: method2, monto: safeNumber(amount2) });
+  return payments;
+}
+
+/* =========================
+   4. AUTENTICACIÓN Y LAYOUT
+   ========================= */
+const savedTheme = localStorage.getItem('ava-theme') || 'light';
+document.documentElement.setAttribute('data-theme', savedTheme);
+
+$('#themeToggle').addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('ava-theme', next);
+});
+
+$('#openSidebar').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+$('#logoutBtn').addEventListener('click', () => auth.signOut());
+
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#loginMsg').textContent = 'Validando credenciales...';
+  try {
+    const email = $('#loginEmail').value.trim();
+    const pass = $('#loginPassword').value;
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch (err) {
+    $('#loginMsg').textContent = 'No fue posible iniciar sesión. Revisa las credenciales.';
+    showError(err, 'Error de login');
+  }
+});
+
+auth.onAuthStateChanged(async user => {
+  if (!user) {
+    currentUser = null; currentRole = null; activeSection = null;
+    cleanupActive();
+    $('#app').classList.add('hidden');
+    $('#loginScreen').classList.remove('hidden');
+    initIcons();
+    return;
+  }
+  try {
+    const rolDoc = await db.collection('usuarios').doc(user.uid).get();
+    if (!rolDoc.exists) {
+      await auth.signOut();
+      toast('Tu usuario no tiene rol asignado en Firestore.', 'error');
+      return;
+    }
+    const data = rolDoc.data();
+    currentUser = user;
+    currentRole = data.rol === 'administrador' ? 'administrador' : 'trabajador';
+    $('#userEmail').textContent = data.email || user.email || '';
+    $('#userRole').textContent = currentRole;
+    $('#loginScreen').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    renderNav();
+    const first = currentRole === 'administrador' ? 'dashboard' : 'facturacion';
+    navigate(first);
+  } catch (err) {
+    showError(err, 'No fue posible cargar el perfil de usuario');
+    await auth.signOut();
+  }
+});
+
+function renderNav() {
+  $('#nav').innerHTML = SECTIONS.filter(s => s.roles.includes(currentRole)).map(s => `
+    <button class="nav-btn" data-section="${s.id}" type="button"><i data-lucide="${s.icon}"></i>${s.label}</button>
+  `).join('');
+  $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => navigate(btn.dataset.section)));
+  initIcons();
+}
+
+function navigate(sectionId) {
+  if (!canAccess(sectionId)) {
+    toast('No tienes permisos para esta sección.', 'error');
+    return;
+  }
+  cleanupActive();
+  activeSection = sectionId;
+  const meta = SECTIONS.find(s => s.id === sectionId);
+  $('#pageTitle').textContent = meta.label;
+  $('#pageKicker').textContent = currentRole === 'administrador' ? 'Administrador' : 'Trabajador';
+  $$('.nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.section === sectionId));
+  $('#sidebar').classList.remove('open');
+  const renderer = SECTION_RENDERERS[sectionId];
+  if (renderer) renderer();
+}
+
+/* =========================
+   5. SECCIÓN: INGRESO DE COMPRAS
+   ========================= */
+function renderIngresoCompras() {
+  let purchaseItems = [];
+  let history = [];
+  let nextNumber = 1;
+
+  setContent(`
+    ${sectionIntro('Ingreso de Compras', 'Registra compras por ítems bajo un mismo número correlativo.')}
+    <div class="card">
+      <div class="form-grid">
+        <div class="field"><label>N° de Compra</label><input id="compraNumero" readonly value="Calculando..." /></div>
+        <div class="field"><label>Tipo de Producto</label><select id="tipoProducto">${PRODUCT_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
+        <div class="field full">
+          <label>Descripción del Producto</label>
+          <input id="descripcionProducto" placeholder="Empieza a escribir para buscar en historial..." autocomplete="off" />
+          <div id="purchaseSuggest" class="suggestions"></div>
+        </div>
+        <div class="field"><label>Cantidad</label><input id="cantidadCompra" type="number" min="0" step="0.01" /></div>
+        <div class="field"><label>Tipo de Unidad</label><select id="unidadCompra">${UNITS.map(u=>`<option>${u}</option>`).join('')}</select></div>
+        <div class="field"><label>Valor Total ($)</label><input id="valorTotalCompra" type="number" min="0" step="0.01" /></div>
+        <div class="field"><label>Valor Unitario ($)</label><input id="valorUnitarioCompra" readonly /></div>
+        <div class="field"><label>Fecha y Hora</label><input class="live-now" readonly /></div>
+      </div>
+      <div id="existingProductNotice" class="notice hidden" style="margin-top:14px"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+        <button id="addPurchaseItem" class="btn btn-primary" type="button"><i data-lucide="plus"></i> Agregar ítem</button>
+        <button id="savePurchase" class="btn btn-success" type="button"><i data-lucide="save"></i> Guardar compra</button>
+      </div>
+    </div>
+    <div class="totalizer"><span>Total pre-compra</span><strong id="purchaseStageTotal">${money(0)}</strong></div>
+    <div class="card"><div id="purchaseStageTable"></div></div>
+  `);
+  setupLiveClock($('#content'));
+
+  const recalcUnit = () => {
+    const qty = safeNumber($('#cantidadCompra').value);
+    const total = parseMoney($('#valorTotalCompra').value);
+    $('#valorUnitarioCompra').value = qty > 0 ? (total / qty).toFixed(2) : '';
+  };
+  $('#cantidadCompra').addEventListener('input', recalcUnit);
+  $('#valorTotalCompra').addEventListener('input', recalcUnit);
+
+  function getLatestByDesc(desc) {
+    return history
+      .filter(x => (x.descripcion || '').toLowerCase() === desc.toLowerCase())
+      .sort((a,b) => (getDocDate(b) || 0) - (getDocDate(a) || 0))[0];
+  }
+
+  function updateNotice() {
+    const desc = $('#descripcionProducto').value.trim();
+    const latest = desc ? getLatestByDesc(desc) : null;
+    const notice = $('#existingProductNotice');
+    if (!latest) { notice.classList.add('hidden'); return; }
+    notice.classList.remove('hidden');
+    notice.innerHTML = `<b>Producto existente:</b> se encontró en historial. Última unidad: <b>${escapeHtml(latest.tipoUnidad || '')}</b> · Último costo unitario: <b>${money(latest.valorUnitario)}</b>. Puedes actualizar el precio con esta compra y se propagará al inventario.`;
+  }
+
+  function resetForm() {
+    $('#descripcionProducto').value='';
+    $('#cantidadCompra').value='';
+    $('#valorTotalCompra').value='';
+    $('#valorUnitarioCompra').value='';
+    $('#existingProductNotice').classList.add('hidden');
+    $('#tipoProducto').value='Producto Venta';
+    $('#unidadCompra').value='Und';
+  }
+
+  function renderStage() {
+    $('#purchaseStageTotal').textContent = money(purchaseItems.reduce((sum,it)=>sum+it.valorTotal,0));
+    if (!purchaseItems.length) {
+      $('#purchaseStageTable').innerHTML = emptyState('Agrega ítems antes de guardar la compra.');
+      initIcons();
+      return;
+    }
+    $('#purchaseStageTable').innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tipo</th><th>Descripción</th><th>Cantidad</th><th>Unidad</th><th>Total</th><th>Unitario</th><th></th></tr></thead>
+        <tbody>${purchaseItems.map((it,idx)=>`
+          <tr>
+            <td><span class="pill">${escapeHtml(it.tipoProducto)}</span></td>
+            <td>${escapeHtml(it.descripcion)}</td>
+            <td>${it.cantidad}</td>
+            <td>${escapeHtml(it.tipoUnidad)}</td>
+            <td class="amount">${money(it.valorTotal)}</td>
+            <td class="amount">${money(it.valorUnitario)}</td>
+            <td><button class="btn btn-danger btn-sm" data-remove-purchase="${idx}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td>
+          </tr>`).join('')}</tbody>
+      </table></div>`;
+    $$('[data-remove-purchase]').forEach(btn => btn.addEventListener('click', () => {
+      purchaseItems.splice(Number(btn.dataset.removePurchase),1);
+      renderStage();
+    }));
+    initIcons();
+  }
+
+  bindAutocomplete($('#descripcionProducto'), $('#purchaseSuggest'), () => history, x => x.descripcion || '', item => {
+    $('#descripcionProducto').value = item.descripcion;
+    $('#tipoProducto').value = item.tipoProducto || 'Producto Venta';
+    $('#unidadCompra').value = item.tipoUnidad || 'Und';
+    $('#valorUnitarioCompra').value = safeNumber(item.valorUnitario).toFixed(2);
+    updateNotice();
+  });
+
+  $('#descripcionProducto').addEventListener('input', updateNotice);
+
+  $('#addPurchaseItem').addEventListener('click', () => {
+    const qty = safeNumber($('#cantidadCompra').value);
+    const total = parseMoney($('#valorTotalCompra').value);
+    const desc = $('#descripcionProducto').value.trim();
+    if (!desc || qty <= 0 || total <= 0) {
+      toast('Completa descripción, cantidad y valor total.', 'error'); return;
+    }
+    const item = {
+      tipoProducto: $('#tipoProducto').value,
+      descripcion: desc,
+      cantidad: qty,
+      tipoUnidad: $('#unidadCompra').value,
+      valorTotal: total,
+      valorUnitario: total / qty,
+      productId: normalizeDocId(desc)
+    };
+    purchaseItems.push(item);
+    resetForm();
+    renderStage();
+  });
+
+  $('#savePurchase').addEventListener('click', async () => {
+    if (!purchaseItems.length) { toast('No hay ítems para guardar.', 'error'); return; }
+    try {
+      const numero = nextNumber;
+      const batch = db.batch();
+      purchaseItems.forEach((it, idx) => {
+        const ref = db.collection('compras').doc();
+        batch.set(ref, { ...it, numeroCompra: numero, itemIndex: idx + 1, fecha: serverNow(), createdAt: serverNow(), creadoPor: currentUser.email });
+        if (it.tipoProducto === 'Producto Venta') {
+          const invRef = db.collection('inventario').doc(it.productId);
+          batch.set(invRef, {
+            tipoProducto: 'Producto Venta', descripcion: it.descripcion, tipoUnidad: it.tipoUnidad,
+            stock: FV.increment(it.cantidad), costoUnitario: it.valorUnitario, updatedAt: serverNow()
+          }, { merge:true });
+          const prodRef = db.collection('productos').doc(it.productId);
+          batch.set(prodRef, { nombre: it.descripcion, costoUnitario: it.valorUnitario, updatedAt: serverNow() }, { merge:true });
+        }
+      });
+      await batch.commit();
+      toast('Compra guardada');
+      purchaseItems = [];
+      resetForm();
+      renderStage();
+    } catch (err) { showError(err, 'No fue posible guardar la compra'); }
+  });
+
+  addUnsub(db.collection('compras').onSnapshot(snap => {
+    history = snap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
+    const max = history.reduce((m,x)=>Math.max(m, safeNumber(x.numeroCompra)), 0);
+    nextNumber = max + 1;
+    $('#compraNumero').value = nextNumber;
+  }));
+  renderStage();
+}
+
+/* =========================
+   6. SECCIÓN: HISTORIAL DE COMPRAS
+   ========================= */
+function renderHistorialCompras() {
+  let purchases = [];
+  setContent(`
+    ${sectionIntro('Historial de Compras', 'Consulta, filtra y elimina compras registradas.')}
+    <div class="card">${renderDateToolbar('historial-compras', true)}<div class="totalizer"><span>Total filtrado</span><strong id="totalCompras">${money(0)}</strong></div><div id="comprasTable"></div></div>
+  `);
+  const render = () => {
+    const start = $('#filterStart').value;
+    const end = $('#filterEnd').value;
+    const type = $('#filterType').value;
+    const filtered = purchases.filter(p => inDateRange(p,start,end) && (!type || p.tipoProducto === type));
+    $('#totalCompras').textContent = money(filtered.reduce((s,p)=>s+safeNumber(p.valorTotal),0));
+    if (!filtered.length) { $('#comprasTable').innerHTML = emptyState(); initIcons(); return; }
+    $('#comprasTable').innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>N°</th><th>Tipo</th><th>Descripción</th><th>Cant.</th><th>Unidad</th><th>Total</th><th>Unitario</th><th></th></tr></thead>
+      <tbody>${filtered.map(p=>`
+        <tr>
+          <td>${localDateTime(getDocDate(p) || new Date())}</td>
+          <td><b>${p.numeroCompra || '-'}</b></td>
+          <td><span class="pill">${escapeHtml(p.tipoProducto)}</span></td>
+          <td>${escapeHtml(p.descripcion)}</td>
+          <td>${safeNumber(p.cantidad)}</td>
+          <td>${escapeHtml(p.tipoUnidad || '')}</td>
+          <td class="amount">${money(p.valorTotal)}</td>
+          <td class="amount">${money(p.valorUnitario)}</td>
+          <td><button class="btn btn-danger btn-sm" data-delete-purchase="${p.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td>
+        </tr>`).join('')}</tbody></table></div>`;
+    $$('[data-delete-purchase]').forEach(btn => btn.addEventListener('click', async () => {
+      const item = purchases.find(p => p.id === btn.dataset.deletePurchase);
+      if (!item || !confirmPassword()) { toast('Acción cancelada o contraseña incorrecta.', 'error'); return; }
+      try {
+        await db.collection('compras').doc(item.id).delete();
+        if (item.tipoProducto === 'Producto Venta') {
+          await restoreInventoryFromItems([item], -1);
+          await recomputeProductCost(item.descripcion);
+        }
+        toast('Registro eliminado e inventario actualizado');
+      } catch(err) { showError(err, 'No fue posible eliminar'); }
+    }));
+    initIcons();
+  };
+  bindDateFilterGuard('historial-compras', render);
+  addUnsub(db.collection('compras').orderBy('createdAt','desc').onSnapshot(snap => {
+    purchases = snap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
+    render();
+  }));
+}
+
+/* =========================
+   7. SECCIÓN: INVENTARIO
+   ========================= */
+function renderInventario() {
+  setContent(`${sectionIntro('Inventario', 'Productos de venta, stock y valorización automática.')}<div class="card"><div id="inventoryTable"></div></div>`);
+  addUnsub(db.collection('inventario').onSnapshot(snap => {
+    const rows = snap.docs.map(doc => ({id:doc.id, ...doc.data()}))
+      .filter(x => x.tipoProducto === 'Producto Venta')
+      .sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
+    const totalStock = rows.reduce((s,r)=>s+safeNumber(r.stock),0);
+    const totalValue = rows.reduce((s,r)=>s+(safeNumber(r.stock)*safeNumber(r.costoUnitario)),0);
+    if (!rows.length) { $('#inventoryTable').innerHTML = emptyState('Todavía no hay productos de venta en inventario.'); initIcons(); return; }
+    $('#inventoryTable').innerHTML = `
+      <div class="grid grid-2" style="margin-bottom:16px">
+        <div class="card" style="box-shadow:none"><span class="muted">Stock total</span><h3>${totalStock}</h3></div>
+        <div class="card" style="box-shadow:none"><span class="muted">Valor inventario</span><h3>${money(totalValue)}</h3></div>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Tipo de Producto</th><th>Descripción</th><th>Stock</th><th>Valor $</th><th></th></tr></thead><tbody>
+      ${rows.map(r=>`
+        <tr>
+          <td><span class="pill green">${escapeHtml(r.tipoProducto)}</span></td>
+          <td>${escapeHtml(r.descripcion)}</td>
+          <td><b>${safeNumber(r.stock)}</b> ${escapeHtml(r.tipoUnidad || '')}</td>
+          <td class="amount">${money(safeNumber(r.stock)*safeNumber(r.costoUnitario))}</td>
+          <td><button class="btn btn-warning btn-sm" data-adjust-stock="${r.id}" type="button"><i data-lucide="sliders-horizontal"></i> Ajustar</button></td>
+        </tr>`).join('')}</tbody></table></div>`;
+    $$('[data-adjust-stock]').forEach(btn => btn.addEventListener('click', async () => {
+      const row = rows.find(r => r.id === btn.dataset.adjustStock);
+      if (!row || !confirmPassword()) { toast('Contraseña incorrecta.', 'error'); return; }
+      const value = prompt(`Nuevo stock para ${row.descripcion}:`, safeNumber(row.stock));
+      if (value === null) return;
+      const stock = safeNumber(value);
+      try {
+        await db.collection('inventario').doc(row.id).set({ stock, updatedAt: serverNow() }, { merge:true });
+        toast('Inventario ajustado');
+      } catch(err) { showError(err, 'No fue posible ajustar'); }
+    }));
+    initIcons();
+  }));
+}
+
+/* =========================
+   8. SECCIÓN: PRODUCTOS
+   ========================= */
+function renderProductos() {
+  let inventory = [];
+  let productDocs = {};
+  let saveTimers = {};
+  setContent(`${sectionIntro('Productos', 'Define PVP y controla márgenes desde el inventario.')}<div class="card"><div id="productsTable"></div></div>`);
+
+  const savePvp = async (id, value, rowEl) => {
+    try {
+      await db.collection('productos').doc(id).set({ pvp: safeNumber(value), updatedAt: serverNow() }, { merge:true });
+      const check = rowEl?.querySelector('.check-save');
+      if (check) { check.classList.add('show'); setTimeout(()=>check.classList.remove('show'), 1200); }
+    } catch(err) { showError(err, 'No fue posible guardar el PVP'); }
+  };
+
+  const render = () => {
+    const rows = inventory.filter(x => x.tipoProducto === 'Producto Venta').sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
+    if (!rows.length) { $('#productsTable').innerHTML = emptyState('Los productos aparecen cuando existan en inventario.'); initIcons(); return; }
+    $('#productsTable').innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Nombre del Producto</th><th>Costo Unitario</th><th>PVP</th><th>Margen $</th><th>Margen %</th></tr></thead>
+      <tbody>${rows.map(r=>{
+        const prod = productDocs[r.id] || {};
+        const costo = safeNumber(r.costoUnitario);
+        const pvp = safeNumber(prod.pvp);
+        const margen = pvp - costo;
+        const pct = pvp > 0 ? (margen / pvp) * 100 : 0;
+        return `<tr data-product-row="${r.id}">
+          <td>${escapeHtml(r.descripcion)}</td>
+          <td class="amount">${money(costo)}</td>
+          <td><div style="display:flex;align-items:center;gap:8px"><input class="pvp-input" data-id="${r.id}" data-costo="${costo}" value="${pvp || ''}" type="number" min="0" step="0.01" placeholder="0" style="max-width:160px" /><span class="check-save">✓</span></div></td>
+          <td class="amount margin-money">${money(margen)}</td>
+          <td class="amount margin-pct">${pct.toFixed(2)}%</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`;
+    $$('.pvp-input').forEach(input => {
+      const row = input.closest('tr');
+      const updateMargins = () => {
+        const pvp = safeNumber(input.value);
+        const costo = safeNumber(input.dataset.costo);
+        const margen = pvp - costo;
+        row.querySelector('.margin-money').textContent = money(margen);
+        row.querySelector('.margin-pct').textContent = pvp > 0 ? ((margen / pvp) * 100).toFixed(2) + '%' : '0.00%';
+      };
+      input.addEventListener('input', () => {
+        updateMargins();
+        clearTimeout(saveTimers[input.dataset.id]);
+        saveTimers[input.dataset.id] = setTimeout(() => savePvp(input.dataset.id, input.value, row), 800);
+      });
+      input.addEventListener('blur', () => savePvp(input.dataset.id, input.value, row));
+    });
+  };
+
+  addUnsub(db.collection('inventario').onSnapshot(snap => { inventory = snap.docs.map(doc => ({ id:doc.id, ...doc.data() })); render(); }));
+  addUnsub(db.collection('productos').onSnapshot(snap => { productDocs = {}; snap.forEach(doc => productDocs[doc.id] = doc.data()); render(); }));
+}
+
+/* =========================
+   9. SECCIÓN: INGRESO DE GASTOS
+   ========================= */
+function renderIngresoGastos() {
+  let history = [];
+  setContent(`
+    ${sectionIntro('Ingreso de Gastos', 'Registra gastos operativos con fecha automática.')}
+    <div class="card">
+      <div class="form-grid three">
+        <div class="field"><label>Fecha y Hora</label><input class="live-now" readonly /></div>
+        <div class="field">
+          <label>Descripción</label><input id="gastoDesc" autocomplete="off" placeholder="Ej. Servicios, aseo, mantenimiento" />
+          <div id="gastoSuggest" class="suggestions"></div>
+        </div>
+        <div class="field"><label>Valor ($)</label><input id="gastoValor" type="number" min="0" step="0.01" /></div>
+      </div>
+      <button id="saveExpense" class="btn btn-primary" style="margin-top:16px" type="button"><i data-lucide="save"></i> Guardar</button>
+    </div>
+  `);
+  setupLiveClock($('#content'));
+  bindAutocomplete($('#gastoDesc'), $('#gastoSuggest'), () => history, x => x.descripcion || '', item => $('#gastoDesc').value = item.descripcion);
+  addUnsub(db.collection('gastos').onSnapshot(snap => { history = snap.docs.map(doc => ({id:doc.id,...doc.data()})); }));
+  $('#saveExpense').addEventListener('click', async () => {
+    const descripcion = $('#gastoDesc').value.trim();
+    const valor = parseMoney($('#gastoValor').value);
+    if (!descripcion || valor <= 0) { toast('Completa descripción y valor.', 'error'); return; }
+    try {
+      await db.collection('gastos').add({ descripcion, valor, fecha: serverNow(), createdAt: serverNow(), creadoPor: currentUser.email });
+      $('#gastoDesc').value=''; $('#gastoValor').value='';
+      toast('Gasto guardado');
+    } catch(err) { showError(err, 'No fue posible guardar el gasto'); }
+  });
+}
+
+/* =========================
+   10. SECCIÓN: HISTORIAL DE GASTOS
+   ========================= */
+function renderHistorialGastos() {
+  let gastos = [];
+  setContent(`${sectionIntro('Historial de Gastos', 'Filtra y administra gastos registrados.')}<div class="card">${renderDateToolbar('historial-gastos')}<div class="totalizer"><span>Total gastos filtrados</span><strong id="totalGastos">${money(0)}</strong></div><div id="gastosTable"></div></div>`);
+  const render = () => {
+    const filtered = gastos.filter(g => inDateRange(g, $('#filterStart').value, $('#filterEnd').value));
+    $('#totalGastos').textContent = money(filtered.reduce((s,g)=>s+safeNumber(g.valor),0));
+    if (!filtered.length) { $('#gastosTable').innerHTML = emptyState(); initIcons(); return; }
+    $('#gastosTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Valor</th><th></th></tr></thead><tbody>
+      ${filtered.map(g=>`<tr><td>${localDateTime(getDocDate(g)||new Date())}</td><td>${escapeHtml(g.descripcion)}</td><td class="amount">${money(g.valor)}</td><td><button class="btn btn-danger btn-sm" data-delete-expense="${g.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+    $$('[data-delete-expense]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirmPassword()) { toast('Contraseña incorrecta.', 'error'); return; }
+      try { await db.collection('gastos').doc(btn.dataset.deleteExpense).delete(); toast('Gasto eliminado'); }
+      catch(err) { showError(err, 'No fue posible eliminar'); }
+    }));
+    initIcons();
+  };
+  bindDateFilterGuard('historial-gastos', render);
+  addUnsub(db.collection('gastos').orderBy('createdAt','desc').onSnapshot(snap => { gastos = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+}
+
+/* =========================
+   11. SECCIÓN: CLIENTES
+   ========================= */
+function renderClientes() {
+  let editingId = null;
+  setContent(`
+    ${sectionIntro('Clientes', 'Crea y administra la base de clientes.')}
+    <div class="card">
+      <div class="form-grid">
+        <div class="field"><label>Nombre</label><input id="clientName" /></div>
+        <div class="field"><label>Cédula</label><input id="clientCedula" /></div>
+        <div class="field"><label>Celular</label><input id="clientPhone" /></div>
+        <div class="field"><label>Nota</label><input id="clientNote" /></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+        <button id="saveClient" class="btn btn-primary" type="button"><i data-lucide="save"></i> Guardar cliente</button>
+        <button id="cancelClientEdit" class="btn btn-soft hidden" type="button">Cancelar edición</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px"><div id="clientsTable"></div></div>
+  `);
+  const clear = () => { editingId=null; $('#clientName').value=''; $('#clientCedula').value=''; $('#clientPhone').value=''; $('#clientNote').value=''; $('#saveClient').innerHTML='<i data-lucide="save"></i> Guardar cliente'; $('#cancelClientEdit').classList.add('hidden'); initIcons(); };
+  $('#cancelClientEdit').addEventListener('click', clear);
+  $('#saveClient').addEventListener('click', async () => {
+    const nombre = $('#clientName').value.trim();
+    if (!nombre) { toast('El nombre es obligatorio.', 'error'); return; }
+    const data = { nombre, cedula: $('#clientCedula').value.trim(), celular: $('#clientPhone').value.trim(), nota: $('#clientNote').value.trim(), updatedAt: serverNow() };
+    try {
+      if (editingId) await db.collection('clientes').doc(editingId).set(data, {merge:true});
+      else await db.collection('clientes').add({ ...data, createdAt: serverNow() });
+      toast(editingId ? 'Cliente actualizado' : 'Cliente creado');
+      clear();
+    } catch(err) { showError(err, 'No fue posible guardar el cliente'); }
+  });
+  addUnsub(db.collection('clientes').onSnapshot(snap => {
+    const clients = snap.docs.map(doc => ({id:doc.id, ...doc.data()})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+    if (!clients.length) { $('#clientsTable').innerHTML = emptyState('No hay clientes registrados.'); initIcons(); return; }
+    $('#clientsTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Cédula</th><th>Celular</th><th>Nota</th><th></th></tr></thead><tbody>
+      ${clients.map(c=>`<tr><td><b>${escapeHtml(c.nombre)}</b></td><td>${escapeHtml(c.cedula||'-')}</td><td>${escapeHtml(c.celular||'-')}</td><td>${escapeHtml(c.nota||'-')}</td><td style="display:flex;gap:8px"><button class="btn btn-soft btn-sm" data-edit-client="${c.id}" type="button"><i data-lucide="pencil"></i> Editar</button><button class="btn btn-danger btn-sm" data-delete-client="${c.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+    $$('[data-edit-client]').forEach(btn => btn.addEventListener('click', () => {
+      const c = clients.find(x => x.id === btn.dataset.editClient);
+      if (!c) return;
+      editingId = c.id;
+      $('#clientName').value = c.nombre || '';
+      $('#clientCedula').value = c.cedula || '';
+      $('#clientPhone').value = c.celular || '';
+      $('#clientNote').value = c.nota || '';
+      $('#saveClient').innerHTML='<i data-lucide="save"></i> Actualizar cliente';
+      $('#cancelClientEdit').classList.remove('hidden');
+      initIcons();
+    }));
+    $$('[data-delete-client]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar este cliente?')) return;
+      try { await db.collection('clientes').doc(btn.dataset.deleteClient).delete(); toast('Cliente eliminado'); }
+      catch(err) { showError(err, 'No fue posible eliminar'); }
+    }));
+    initIcons();
+  }));
+}
+
+/* =========================
+   12. SECCIÓN: FACTURACIÓN
+   ========================= */
+function renderFacturacion() {
+  let clients = [];
+  let products = [];
+  let inventoryProducts = [];
+  let productPvpMap = {};
+  let items = [];
+  let nextInvoice = 1;
+
+  setContent(`
+    ${sectionIntro('Facturación', 'Factura productos, registra pagos y genera cartera cuando corresponda.')}
+    <div class="card">
+      <div class="form-grid">
+        <div class="field"><label>N° de Factura</label><input id="invoiceNumber" readonly value="Calculando..." /></div>
+        <div class="field">
+          <label>Nombre del Cliente</label><input id="invoiceClient" value="General" autocomplete="off" />
+          <div id="clientSuggest" class="suggestions"></div>
+        </div>
+        <div class="field">
+          <label>Producto</label><input id="invoiceProduct" autocomplete="off" placeholder="Buscar producto..." />
+          <div id="productSuggest" class="suggestions"></div>
+        </div>
+        <div class="field"><label>Cantidad</label><input id="invoiceQty" type="number" min="0" step="0.01" /></div>
+        <div class="field"><label>PVP Unitario</label><input id="invoicePvp" readonly /></div>
+        <div class="field"><label>Total ítem</label><input id="invoiceItemTotal" readonly /></div>
+        <div class="field"><label>Forma de Pago</label><select id="invoicePayment1">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="field"><label>Monto Recibido</label><input id="invoiceReceived1" type="number" min="0" step="0.01" placeholder="Vacío = cartera" /></div>
+        <div class="field"><label>Pago Dividido</label><label class="pill" style="justify-content:center"><input id="invoiceSplit" type="checkbox" style="width:auto" /> Activar segundo pago</label></div>
+        <div class="field split-invoice hidden"><label>Segundo método</label><select id="invoicePayment2">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="field split-invoice hidden"><label>Monto segundo método</label><input id="invoiceReceived2" type="number" min="0" step="0.01" /></div>
+        <div class="field"><label>Fecha y Hora</label><input class="live-now" readonly /></div>
+        <div class="field"><label>Valor a Devolver / Pendiente</label><input id="invoiceChange" readonly /></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+        <button id="addInvoiceItem" class="btn btn-primary" type="button"><i data-lucide="plus"></i> Agregar ítem</button>
+        <button id="saveInvoice" class="btn btn-success" type="button"><i data-lucide="save"></i> Guardar venta</button>
+      </div>
+    </div>
+    <div class="totalizer"><span>Total venta</span><strong id="invoiceTotal">${money(0)}</strong></div>
+    <div class="card"><div id="invoiceItemsTable"></div></div>
+  `);
+  setupLiveClock($('#content'));
+
+  let selectedClient = { nombre:'General', id:null };
+  let selectedProduct = null;
+
+  function mergeInvoiceProducts() {
+    products = inventoryProducts.map(x => ({
+      ...x, nombre: x.descripcion, pvp: safeNumber(productPvpMap[x.id]?.pvp), costoUnitario: safeNumber(x.costoUnitario)
+    }));
+  }
+
+  function saleTotal() { return items.reduce((s,it)=>s + safeNumber(it.total), 0); }
+  function updateMoneyFields() {
+    const qty = safeNumber($('#invoiceQty').value);
+    const pvp = safeNumber($('#invoicePvp').value);
+    $('#invoiceItemTotal').value = qty > 0 && pvp >= 0 ? (qty*pvp).toFixed(2) : '';
+    const received1Raw = $('#invoiceReceived1').value;
+    const received1 = received1Raw === '' ? 0 : safeNumber(received1Raw);
+    const received2 = $('#invoiceSplit').checked ? safeNumber($('#invoiceReceived2').value) : 0;
+    const diff = received1 + received2 - saleTotal();
+    $('#invoiceChange').value = diff >= 0 ? `Devuelve ${money(diff)}` : `Pendiente ${money(Math.abs(diff))}`;
+  }
+  ['invoiceQty','invoiceReceived1','invoiceReceived2'].forEach(id => $('#' + id).addEventListener('input', updateMoneyFields));
+  $('#invoiceSplit').addEventListener('change', () => { $$('.split-invoice').forEach(el=>el.classList.toggle('hidden', !$('#invoiceSplit').checked)); updateMoneyFields(); });
+
+  function renderItems() {
+    $('#invoiceTotal').textContent = money(saleTotal());
+    updateMoneyFields();
+    if (!items.length) { $('#invoiceItemsTable').innerHTML = emptyState('Agrega productos a la factura.'); initIcons(); return; }
+    $('#invoiceItemsTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>PVP</th><th>Total</th><th></th></tr></thead><tbody>
+      ${items.map((it,idx)=>`<tr><td>${escapeHtml(it.descripcion)}</td><td>${it.cantidad}</td><td>${money(it.pvpUnitario)}</td><td class="amount">${money(it.total)}</td><td><button class="btn btn-danger btn-sm" data-remove-invoice-item="${idx}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+    $$('[data-remove-invoice-item]').forEach(btn => btn.addEventListener('click', () => { items.splice(Number(btn.dataset.removeInvoiceItem),1); renderItems(); }));
+    initIcons();
+  }
+  function clearProductForm() { selectedProduct=null; $('#invoiceProduct').value=''; $('#invoiceQty').value=''; $('#invoicePvp').value=''; $('#invoiceItemTotal').value=''; }
+
+  bindAutocomplete($('#invoiceClient'), $('#clientSuggest'), () => clients, x => x.nombre || '', c => { selectedClient = c; $('#invoiceClient').value = c.nombre; });
+  bindAutocomplete($('#invoiceProduct'), $('#productSuggest'), () => products, x => x.descripcion || x.nombre || '', p => {
+    selectedProduct = p;
+    $('#invoiceProduct').value = p.descripcion || p.nombre;
+    $('#invoicePvp').value = safeNumber(p.pvp).toFixed(2);
+    updateMoneyFields();
+  });
+
+  $('#addInvoiceItem').addEventListener('click', () => {
+    const desc = $('#invoiceProduct').value.trim();
+    const p = selectedProduct || products.find(x => (x.descripcion || x.nombre || '').toLowerCase() === desc.toLowerCase());
+    const qty = safeNumber($('#invoiceQty').value);
+    const pvp = safeNumber($('#invoicePvp').value);
+    if (!p || !desc || qty <= 0 || pvp <= 0) { toast('Selecciona producto, cantidad y PVP válido.', 'error'); return; }
+    items.push({
+      productId: p.id, descripcion: p.descripcion || p.nombre, cantidad: qty,
+      pvpUnitario: pvp, costoUnitario: safeNumber(p.costoUnitario), total: qty * pvp,
+      tipoProducto: 'Producto Venta'
+    });
+    clearProductForm();
+    renderItems();
+  });
+
+  $('#saveInvoice').addEventListener('click', async () => {
+    if (!items.length) { toast('No hay ítems para guardar.', 'error'); return; }
+    try {
+      const total = saleTotal();
+      const received1Empty = $('#invoiceReceived1').value === '';
+      const amount1 = received1Empty ? 0 : safeNumber($('#invoiceReceived1').value);
+      const amount2 = $('#invoiceSplit').checked ? safeNumber($('#invoiceReceived2').value) : 0;
+      const totalReceived = amount1 + amount2;
+      const paid = Math.min(totalReceived, total);
+      const debt = Math.max(total - totalReceived, 0);
+      const payments = getPaymentDistribution($('#invoicePayment1').value, amount1, $('#invoiceSplit').checked, $('#invoicePayment2').value, amount2);
+      const clienteNombre = $('#invoiceClient').value.trim() || 'General';
+      const facturaNumero = nextInvoice;
+      const batch = db.batch();
+      const invoiceRef = db.collection('facturas').doc();
+
+      batch.set(invoiceRef, {
+        facturaNumero, clienteNombre, clienteId: selectedClient?.id || null, items,
+        totalFactura: total, totalRecibido: totalReceived, totalPagado: paid, saldoPendiente: debt,
+        formaPago: $('#invoicePayment1').value, pagoDividido: $('#invoiceSplit').checked, pagos: payments,
+        fecha: serverNow(), createdAt: serverNow(), creadoPor: currentUser.email
+      });
+
+      items.forEach(it => {
+        const invRef = db.collection('inventario').doc(it.productId);
+        batch.set(invRef, { stock: FV.increment(-safeNumber(it.cantidad)), updatedAt: serverNow() }, { merge:true });
+      });
+
+      if (paid > 0) {
+        const saleRef = db.collection('ventas').doc();
+        batch.set(saleRef, {
+          facturaNumero, facturaId: invoiceRef.id, clienteNombre, clienteId: selectedClient?.id || null, items,
+          totalFactura: total, totalPagado: paid, valor: paid, saldoPendiente: debt,
+          formaPago: $('#invoicePayment1').value, pagoDividido: $('#invoiceSplit').checked, pagos: payments,
+          fecha: serverNow(), createdAt: serverNow(), origen:'facturacion', creadoPor: currentUser.email
+        });
+      }
+      if (debt > 0 || totalReceived <= 0) {
+        const debtRef = db.collection('cartera').doc();
+        batch.set(debtRef, {
+          clienteNombre, clienteId: selectedClient?.id || null,
+          descripcion: items.map(i => `${i.descripcion} x${i.cantidad}`).join(', '),
+          valorPendiente: debt > 0 ? debt : total, valorOriginal: total, origen:'facturacion', facturaNumero, facturaId: invoiceRef.id,
+          items, fecha: serverNow(), createdAt: serverNow()
+        });
+      }
+      await batch.commit();
+      toast('Venta registrada');
+      items = []; selectedClient = { nombre:'General', id:null };
+      $('#invoiceClient').value='General'; $('#invoiceReceived1').value=''; $('#invoiceReceived2').value=''; $('#invoiceSplit').checked=false; $$('.split-invoice').forEach(el=>el.classList.add('hidden'));
+      renderItems();
+    } catch(err) { showError(err, 'No fue posible guardar la venta'); }
+  });
+
+  addUnsub(db.collection('clientes').onSnapshot(snap => { clients = snap.docs.map(doc => ({id:doc.id,...doc.data()})); }));
+  addUnsub(db.collection('facturas').onSnapshot(snap => {
+    const nums = snap.docs.map(d => safeNumber(d.data().facturaNumero));
+    nextInvoice = (nums.length ? Math.max(...nums) : 0) + 1;
+    $('#invoiceNumber').value = nextInvoice;
+  }));
+  addUnsub(db.collection('inventario').onSnapshot(invSnap => {
+    inventoryProducts = invSnap.docs.map(doc => ({id:doc.id,...doc.data()})).filter(x => x.tipoProducto === 'Producto Venta');
+    mergeInvoiceProducts();
+  }));
+  addUnsub(db.collection('productos').onSnapshot(prodSnap => {
+    productPvpMap = {};
+    prodSnap.forEach(doc => productPvpMap[doc.id] = doc.data());
+    mergeInvoiceProducts();
+  }));
+  renderItems();
+}
+
+/* =========================
+   13. SECCIÓN: VENTAS
+   ========================= */
+function renderVentas() {
+  let ventas = [];
+  setContent(`${sectionIntro('Ventas', 'Ventas y abonos registrados por facturación.')}<div class="card">${renderDateToolbar('ventas')}<div class="totalizer"><span>Total ventas filtradas</span><strong id="totalVentas">${money(0)}</strong></div><div id="ventasTable"></div></div>`);
+  const render = () => {
+    const filtered = ventas.filter(v => inDateRange(v, $('#filterStart').value, $('#filterEnd').value));
+    $('#totalVentas').textContent = money(filtered.reduce((s,v)=>s+safeNumber(v.valor || v.totalPagado),0));
+    if (!filtered.length) { $('#ventasTable').innerHTML = emptyState(); initIcons(); return; }
+    $('#ventasTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Descripción</th><th>Pago</th><th>Valor</th><th></th></tr></thead><tbody>
+      ${filtered.map(v=>`<tr><td>${localDateTime(getDocDate(v)||new Date())}</td><td>${v.facturaNumero || (v.tipo === 'abono' ? 'Abono' : '-')}</td><td>${escapeHtml(v.clienteNombre || 'General')}</td><td>${escapeHtml(v.descripcion || (v.items||[]).map(i=>i.descripcion).join(', '))}</td><td>${escapeHtml((v.pagos||[]).map(p=>`${p.metodo}: ${money(p.monto)}`).join(' · ') || v.formaPago || '-')}</td><td class="amount">${money(v.valor || v.totalPagado)}</td><td><button class="btn btn-danger btn-sm" data-delete-sale="${v.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+    $$('[data-delete-sale]').forEach(btn => btn.addEventListener('click', async () => {
+      const sale = ventas.find(v => v.id === btn.dataset.deleteSale);
+      if (!sale || !confirmPassword()) { toast('Contraseña incorrecta.', 'error'); return; }
+      try {
+        await db.collection('ventas').doc(sale.id).delete();
+        if (!sale.isAbono && Array.isArray(sale.items)) await restoreInventoryFromItems(sale.items, 1);
+        toast('Venta eliminada');
+      } catch(err) { showError(err, 'No fue posible eliminar'); }
+    }));
+    initIcons();
+  };
+  bindDateFilterGuard('ventas', render);
+  addUnsub(db.collection('ventas').orderBy('createdAt','desc').onSnapshot(snap => { ventas = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+}
+
+/* =========================
+   14. SECCIÓN: SERVICIOS
+   ========================= */
+function renderServicios() {
+  let editingId = null;
+  setContent(`
+    ${sectionIntro('Servicios', 'Crea servicios de estadía por duración o por hora fija de salida.')}
+    <div class="card">
+      <div class="form-grid">
+        <div class="field"><label>Descripción</label><input id="serviceDesc" placeholder="Ej. 2 horas, noche, amanecida" /></div>
+        <div class="field"><label>Valor ($)</label><input id="serviceValue" type="number" min="0" step="0.01" /></div>
+        <div class="field"><label>Tipo de Tiempo</label><select id="serviceTimeType"><option value="duracion">Por duración</option><option value="horaFija">Hora fija de salida</option></select></div>
+        <div class="field service-duration"><label>Número de horas</label><input id="serviceHours" type="number" min="0" step="0.25" placeholder="2" /></div>
+        <div class="field service-fixed hidden"><label>Hora exacta de salida</label><input id="serviceFixedTime" type="time" /></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+        <button id="saveService" class="btn btn-primary" type="button"><i data-lucide="save"></i> Guardar servicio</button>
+        <button id="cancelServiceEdit" class="btn btn-soft hidden" type="button">Cancelar edición</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px"><div id="servicesTable"></div></div>
+  `);
+  const toggleTime = () => { const fixed = $('#serviceTimeType').value === 'horaFija'; $('.service-duration').classList.toggle('hidden', fixed); $('.service-fixed').classList.toggle('hidden', !fixed); };
+  $('#serviceTimeType').addEventListener('change', toggleTime);
+  const clear = () => { editingId=null; $('#serviceDesc').value=''; $('#serviceValue').value=''; $('#serviceTimeType').value='duracion'; $('#serviceHours').value=''; $('#serviceFixedTime').value=''; $('#cancelServiceEdit').classList.add('hidden'); $('#saveService').innerHTML='<i data-lucide="save"></i> Guardar servicio'; toggleTime(); initIcons(); };
+  $('#cancelServiceEdit').addEventListener('click', clear);
+  $('#saveService').addEventListener('click', async () => {
+    const descripcion = $('#serviceDesc').value.trim();
+    const valor = parseMoney($('#serviceValue').value);
+    const tipoTiempo = $('#serviceTimeType').value;
+    const horas = safeNumber($('#serviceHours').value);
+    const horaSalida = $('#serviceFixedTime').value;
+    if (!descripcion || valor <= 0 || (tipoTiempo === 'duracion' && horas <= 0) || (tipoTiempo === 'horaFija' && !horaSalida)) { toast('Completa todos los campos del servicio.', 'error'); return; }
+    try {
+      const data = { descripcion, valor, tipoTiempo, horas, horaSalida, updatedAt: serverNow() };
+      if (editingId) await db.collection('servicios').doc(editingId).set(data,{merge:true});
+      else await db.collection('servicios').add({ ...data, createdAt: serverNow() });
+      toast(editingId ? 'Servicio actualizado' : 'Servicio creado');
+      clear();
+    } catch(err) { showError(err, 'No fue posible guardar'); }
+  });
+  addUnsub(db.collection('servicios').onSnapshot(snap => {
+    const services = snap.docs.map(doc => ({id:doc.id,...doc.data()})).sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
+    if (!services.length) { $('#servicesTable').innerHTML = emptyState('Crea servicios para usarlos en Registro de Huéspedes.'); initIcons(); return; }
+    $('#servicesTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Valor</th><th>Tiempo</th><th></th></tr></thead><tbody>
+      ${services.map(s=>`<tr><td><b>${escapeHtml(s.descripcion)}</b></td><td>${money(s.valor)}</td><td>${s.tipoTiempo === 'duracion' ? `${s.horas} horas` : `Salida ${escapeHtml(s.horaSalida)}`}</td><td style="display:flex;gap:8px"><button class="btn btn-soft btn-sm" data-edit-service="${s.id}" type="button"><i data-lucide="pencil"></i> Editar</button><button class="btn btn-danger btn-sm" data-delete-service="${s.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+    $$('[data-edit-service]').forEach(btn => btn.addEventListener('click', () => {
+      const s = services.find(x => x.id === btn.dataset.editService); if (!s) return;
+      editingId=s.id; $('#serviceDesc').value=s.descripcion||''; $('#serviceValue').value=s.valor||''; $('#serviceTimeType').value=s.tipoTiempo||'duracion'; $('#serviceHours').value=s.horas||''; $('#serviceFixedTime').value=s.horaSalida||''; $('#cancelServiceEdit').classList.remove('hidden'); $('#saveService').innerHTML='<i data-lucide="save"></i> Actualizar servicio'; toggleTime(); initIcons();
+    }));
+    $$('[data-delete-service]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar este servicio?')) return;
+      try { await db.collection('servicios').doc(btn.dataset.deleteService).delete(); toast('Servicio eliminado'); }
+      catch(err) { showError(err, 'No fue posible eliminar'); }
+    }));
+    initIcons();
+  }));
+  toggleTime();
+}
+
+/* =========================
+   15. SECCIÓN: HABITACIONES
+   ========================= */
+function calculateExitDate(service, base = new Date()) {
+  if (!service) return null;
+  if (service.tipoTiempo === 'duracion') return new Date(base.getTime() + safeNumber(service.horas) * 60 * 60 * 1000);
+  if (service.tipoTiempo === 'horaFija' && service.horaSalida) {
+    const [h,m] = service.horaSalida.split(':').map(Number);
+    const d = new Date(base);
+    d.setHours(h || 0, m || 0, 0, 0);
+    if (d <= base) d.setDate(d.getDate() + 1);
+    return d;
+  }
+  return null;
+}
+
+function roomStatus(room) {
+  if (room.estado !== 'ocupada') return {cls:'free', label:'Libre'};
+  const exit = room.estadiaActiva?.expiresAt?.toDate ? room.estadiaActiva.expiresAt.toDate() : (room.estadiaActiva?.expiresAt ? new Date(room.estadiaActiva.expiresAt) : null);
+  if (!exit) return {cls:'busy', label:'Ocupada'};
+  const mins = Math.round((exit - new Date()) / 60000);
+  if (mins <= 15) return {cls:'alert', label: mins <= 0 ? 'Salida vencida' : 'Próxima salida'};
+  return {cls:'busy', label:'Ocupada'};
+}
+
+function formatRemaining(room) {
+  if (room.estado !== 'ocupada') return 'Disponible';
+  const exit = room.estadiaActiva?.expiresAt?.toDate ? room.estadiaActiva.expiresAt.toDate() : (room.estadiaActiva?.expiresAt ? new Date(room.estadiaActiva.expiresAt) : null);
+  if (!exit) return 'Sin hora de salida';
+  const diff = exit - new Date();
+  if (diff <= 0) return `Vencido desde ${localDateTime(exit)}`;
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return `${h}h ${m}m restantes`;
+}
+
+function renderHabitaciones() {
+  let rooms = [];
+  setContent(`
+    ${sectionIntro('Habitaciones', 'Crea, monitorea y libera habitaciones en tiempo real.')}
+    <div class="card">
+      <div class="form-grid two">
+        <div class="field"><label>Nombre o número de habitación</label><input id="roomName" placeholder="Ej. 101, Suite 2" /></div>
+        <button id="createRoom" class="btn btn-primary" type="button"><i data-lucide="plus"></i> Crear habitación</button>
+      </div>
+    </div>
+    <div class="room-grid" id="roomsGrid" style="margin-top:16px"></div>
+  `);
+  $('#createRoom').addEventListener('click', async () => {
+    const nombre = $('#roomName').value.trim();
+    if (!nombre) { toast('Escribe el nombre de la habitación.', 'error'); return; }
+    try { await db.collection('habitaciones').add({ nombre, estado:'libre', createdAt: serverNow(), updatedAt: serverNow() }); $('#roomName').value=''; toast('Habitación creada'); }
+    catch(err) { showError(err, 'No fue posible crear habitación'); }
+  });
+  function renderRooms() {
+    if (!rooms.length) { $('#roomsGrid').innerHTML = `<div class="card">${emptyState('No hay habitaciones creadas.')}</div>`; initIcons(); return; }
+    $('#roomsGrid').innerHTML = rooms.map(r => {
+      const st = roomStatus(r);
+      return `<div class="room-card ${st.cls}" data-room="${r.id}">
+        <div class="room-title">${escapeHtml(r.nombre)}</div>
+        <div class="pill ${st.cls === 'free' ? 'green' : st.cls === 'alert' ? 'yellow' : 'red'}">${st.label}</div>
+        <p class="mini" style="margin:12px 0 0">${escapeHtml(formatRemaining(r))}</p>
+        ${r.estado === 'libre' ? `<button class="btn btn-danger btn-sm" data-delete-room="${r.id}" style="margin-top:14px" type="button"><i data-lucide="trash-2"></i> Eliminar</button>` : ''}
+      </div>`;
+    }).join('');
+    $$('.room-card').forEach(card => card.addEventListener('click', ev => {
+      if (ev.target.closest('[data-delete-room]')) return;
+      const r = rooms.find(x => x.id === card.dataset.room);
+      if (r?.estado === 'ocupada') openRoomPanel(r);
+    }));
+    $$('[data-delete-room]').forEach(btn => btn.addEventListener('click', async ev => {
+      ev.stopPropagation();
+      if (!confirmPassword()) { toast('Contraseña incorrecta.', 'error'); return; }
+      try { await db.collection('habitaciones').doc(btn.dataset.deleteRoom).delete(); toast('Habitación eliminada'); }
+      catch(err) { showError(err, 'No fue posible eliminar'); }
+    }));
+    initIcons();
+  }
+  addUnsub(db.collection('habitaciones').onSnapshot(snap => { rooms = snap.docs.map(doc => ({id:doc.id,...doc.data()})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'', undefined, {numeric:true})); renderRooms(); }));
+  const interval = setInterval(renderRooms, 30000); activeIntervals.push(interval);
+}
+
+async function openRoomPanel(room) {
+  const stay = room.estadiaActiva || {};
+  modal(`
+    <h3>Habitación ${escapeHtml(room.nombre)}</h3>
+    <p class="muted">Estado actual de la estadía</p>
+    <div class="grid" style="margin-top:14px">
+      <div class="notice"><b>Cliente:</b> ${escapeHtml(stay.clienteNombre || '-')}<br><b>Cédula:</b> ${escapeHtml(stay.cedula || '-')}<br><b>Servicio:</b> ${escapeHtml(stay.servicioDescripcion || '-')}<br><b>Tiempo:</b> ${escapeHtml(formatRemaining(room))}</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-soft" id="closeRoomModal" type="button">Cerrar</button>
+      <button class="btn btn-warning" id="renewStay" type="button"><i data-lucide="refresh-cw"></i> Renovar estadía</button>
+      <button class="btn btn-success" id="releaseRoom" type="button"><i data-lucide="door-open"></i> Liberar habitación</button>
+    </div>
+  `);
+  $('#closeRoomModal').addEventListener('click', closeModal);
+  $('#releaseRoom').addEventListener('click', async () => {
+    try { await db.collection('habitaciones').doc(room.id).set({ estado:'libre', estadiaActiva: null, updatedAt: serverNow() }, {merge:true}); closeModal(); toast('Habitación liberada'); }
+    catch(err) { showError(err, 'No fue posible liberar habitación'); }
+  });
+  $('#renewStay').addEventListener('click', async () => {
+    try {
+      const serviceDoc = stay.servicioId ? await db.collection('servicios').doc(stay.servicioId).get() : null;
+      const service = serviceDoc?.exists ? serviceDoc.data() : { tipoTiempo: stay.tipoTiempo, horas: stay.horas, horaSalida: stay.horaSalida };
+      const exit = calculateExitDate(service, new Date());
+      await db.collection('habitaciones').doc(room.id).set({
+        estadiaActiva: { ...stay, checkIn: serverNow(), expiresAt: firebase.firestore.Timestamp.fromDate(exit), renovadaAt: serverNow() },
+        updatedAt: serverNow()
+      }, {merge:true});
+      closeModal(); toast('Estadía renovada');
+    } catch(err) { showError(err, 'No fue posible renovar'); }
+  });
+}
+
+/* =========================
+   16. SECCIÓN: REGISTRO DE HUÉSPEDES
+   ========================= */
+function renderRegistroHuespedes() {
+  let clients = [];
+  let services = [];
+  let rooms = [];
+  let selectedClient = null;
+
+  setContent(`
+    ${sectionIntro('Registro de Huéspedes', 'Registra estadías y ocupa habitaciones automáticamente.')}
+    <div class="card">
+      <div class="form-grid">
+        <div class="field"><label>Nombre</label><input id="guestName" autocomplete="off" /><div id="guestSuggest" class="suggestions"></div></div>
+        <div class="field"><label>Cédula</label><input id="guestCedula" /></div>
+        <div class="field"><label>Tipo de Estadía</label><select id="guestService"><option value="">Selecciona...</option></select></div>
+        <div class="field"><label>Habitación</label><select id="guestRoom"><option value="">Selecciona...</option></select></div>
+        <div class="field"><label>Fecha y Hora</label><input class="live-now" readonly /></div>
+        <div class="field"><label>Valor</label><input id="guestValue" readonly /></div>
+        <div class="field"><label>Forma de Pago</label><select id="guestPayment1">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="field"><label>Monto Recibido</label><input id="guestReceived1" type="number" min="0" step="0.01" placeholder="Vacío = cartera" /></div>
+        <div class="field"><label>Pago Dividido</label><label class="pill" style="justify-content:center"><input id="guestSplit" type="checkbox" style="width:auto" /> Activar segundo pago</label></div>
+        <div class="field split-guest hidden"><label>Segundo método</label><select id="guestPayment2">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="field split-guest hidden"><label>Monto segundo método</label><input id="guestReceived2" type="number" min="0" step="0.01" /></div>
+        <div class="field"><label>Cambio / Saldo</label><input id="guestChange" readonly /></div>
+      </div>
+      <button id="saveGuest" class="btn btn-primary" style="margin-top:16px" type="button"><i data-lucide="save"></i> Guardar registro</button>
+    </div>
+  `);
+  setupLiveClock($('#content'));
+
+  const updateSelects = () => {
+    $('#guestService').innerHTML = `<option value="">Selecciona...</option>` + services.map(s=>`<option value="${s.id}">${escapeHtml(s.descripcion)}</option>`).join('');
+    $('#guestRoom').innerHTML = `<option value="">Selecciona...</option>` + rooms.filter(r => r.estado !== 'ocupada').map(r=>`<option value="${r.id}">${escapeHtml(r.nombre)}</option>`).join('');
+  };
+  const calc = () => {
+    const service = services.find(s => s.id === $('#guestService').value);
+    $('#guestValue').value = service ? safeNumber(service.valor).toFixed(2) : '';
+    const total = service ? safeNumber(service.valor) : 0;
+    const received1 = $('#guestReceived1').value === '' ? 0 : safeNumber($('#guestReceived1').value);
+    const received2 = $('#guestSplit').checked ? safeNumber($('#guestReceived2').value) : 0;
+    const diff = received1 + received2 - total;
+    $('#guestChange').value = diff >= 0 ? `Devuelve ${money(diff)}` : `Pendiente ${money(Math.abs(diff))}`;
+  };
+  $('#guestService').addEventListener('change', calc);
+  ['guestReceived1','guestReceived2'].forEach(id => $('#' + id).addEventListener('input', calc));
+  $('#guestSplit').addEventListener('change', () => { $$('.split-guest').forEach(el=>el.classList.toggle('hidden', !$('#guestSplit').checked)); calc(); });
+
+  bindAutocomplete($('#guestName'), $('#guestSuggest'), () => clients, x => x.nombre || '', c => { selectedClient = c; $('#guestName').value = c.nombre; $('#guestCedula').value = c.cedula || ''; });
+
+  $('#saveGuest').addEventListener('click', async () => {
+    const service = services.find(s => s.id === $('#guestService').value);
+    const room = rooms.find(r => r.id === $('#guestRoom').value);
+    const clienteNombre = $('#guestName').value.trim();
+    if (!clienteNombre || !service || !room) { toast('Completa cliente, servicio y habitación.', 'error'); return; }
+    try {
+      const total = safeNumber(service.valor);
+      const amount1 = $('#guestReceived1').value === '' ? 0 : safeNumber($('#guestReceived1').value);
+      const amount2 = $('#guestSplit').checked ? safeNumber($('#guestReceived2').value) : 0;
+      const received = amount1 + amount2;
+      const paid = Math.min(received, total);
+      const debt = Math.max(total - received, 0);
+      const payments = getPaymentDistribution($('#guestPayment1').value, amount1, $('#guestSplit').checked, $('#guestPayment2').value, amount2);
+      const exit = calculateExitDate(service, new Date());
+      const batch = db.batch();
+      const roomRef = db.collection('habitaciones').doc(room.id);
+      let registroRef = null;
+      if (paid > 0) {
+        registroRef = db.collection('registros').doc();
+        batch.set(registroRef, {
+          clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(),
+          servicioId: service.id, servicioDescripcion: service.descripcion, habitacionId: room.id, habitacionNombre: room.nombre,
+          valorTotal: total, valorPagado: paid, valor: paid, saldoPendiente: debt,
+          formaPago: $('#guestPayment1').value, pagoDividido: $('#guestSplit').checked, pagos: payments,
+          fecha: serverNow(), createdAt: serverNow(), origen:'hospedaje', creadoPor: currentUser.email
+        });
+      }
+      if (debt > 0 || received <= 0) {
+        const debtRef = db.collection('cartera').doc();
+        batch.set(debtRef, {
+          clienteNombre, clienteId: selectedClient?.id || null, descripcion: service.descripcion,
+          valorPendiente: debt > 0 ? debt : total, valorOriginal: total, origen:'hospedaje', servicioId: service.id,
+          habitacionId: room.id, habitacionNombre: room.nombre, fecha: serverNow(), createdAt: serverNow()
+        });
+      }
+      batch.set(roomRef, {
+        estado:'ocupada', updatedAt: serverNow(),
+        estadiaActiva: {
+          clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(), servicioId: service.id,
+          servicioDescripcion: service.descripcion, valor: total, checkIn: serverNow(), expiresAt: firebase.firestore.Timestamp.fromDate(exit),
+          tipoTiempo: service.tipoTiempo, horas: service.horas || null, horaSalida: service.horaSalida || null, registroId: registroRef?.id || null
+        }
+      }, { merge:true });
+      await batch.commit();
+      toast('Registro guardado');
+      $('#guestName').value=''; $('#guestCedula').value=''; $('#guestService').value=''; $('#guestRoom').value=''; $('#guestReceived1').value=''; $('#guestReceived2').value=''; $('#guestSplit').checked=false; $$('.split-guest').forEach(el=>el.classList.add('hidden')); calc();
+    } catch(err) { showError(err, 'No fue posible guardar el registro'); }
+  });
+
+  addUnsub(db.collection('clientes').onSnapshot(snap => { clients = snap.docs.map(doc => ({id:doc.id,...doc.data()})); }));
+  addUnsub(db.collection('servicios').onSnapshot(snap => { services = snap.docs.map(doc => ({id:doc.id,...doc.data()})); updateSelects(); calc(); }));
+  addUnsub(db.collection('habitaciones').onSnapshot(snap => { rooms = snap.docs.map(doc => ({id:doc.id,...doc.data()})); updateSelects(); }));
+  updateSelects();
+}
+
+/* =========================
+   17. SECCIÓN: HISTORIAL DE REGISTROS
+   ========================= */
+function renderHistorialRegistros() {
+  let registros = [];
+  setContent(`${sectionIntro('Historial de Registros', 'Historial de ingresos por hospedaje y abonos de cartera.')}<div class="card">${renderDateToolbar('historial-registros')}<div class="totalizer"><span>Total registros filtrados</span><strong id="totalRegistros">${money(0)}</strong></div><div id="registrosTable"></div></div>`);
+  const render = () => {
+    const filtered = registros.filter(r => inDateRange(r, $('#filterStart').value, $('#filterEnd').value));
+    $('#totalRegistros').textContent = money(filtered.reduce((s,r)=>s+safeNumber(r.valor || r.valorPagado),0));
+    if (!filtered.length) { $('#registrosTable').innerHTML = emptyState(); initIcons(); return; }
+    $('#registrosTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cliente</th><th>Cédula</th><th>Servicio</th><th>Habitación</th><th>Pago</th><th>Valor</th><th></th></tr></thead><tbody>
+      ${filtered.map(r=>`<tr><td>${localDateTime(getDocDate(r)||new Date())}</td><td>${escapeHtml(r.clienteNombre||'-')}</td><td>${escapeHtml(r.cedula||'-')}</td><td>${escapeHtml(r.servicioDescripcion || r.descripcion || '-')}</td><td>${escapeHtml(r.habitacionNombre||'-')}</td><td>${escapeHtml((r.pagos||[]).map(p=>`${p.metodo}: ${money(p.monto)}`).join(' · ') || r.formaPago || '-')}</td><td class="amount">${money(r.valor || r.valorPagado)}</td><td><button class="btn btn-danger btn-sm" data-delete-reg="${r.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+    $$('[data-delete-reg]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirmPassword()) { toast('Contraseña incorrecta.', 'error'); return; }
+      try { await db.collection('registros').doc(btn.dataset.deleteReg).delete(); toast('Registro eliminado'); }
+      catch(err) { showError(err, 'No fue posible eliminar'); }
+    }));
+    initIcons();
+  };
+  bindDateFilterGuard('historial-registros', render);
+  addUnsub(db.collection('registros').orderBy('createdAt','desc').onSnapshot(snap => { registros = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+}
+
+/* =========================
+   18. SECCIÓN: CARTERA
+   ========================= */
+async function registerDebtPayment(debt, amount, method) {
+  const pay = Math.min(safeNumber(amount), safeNumber(debt.valorPendiente));
+  if (pay <= 0) throw new Error('El valor del abono debe ser mayor a cero.');
+  const batch = db.batch();
+  const debtRef = db.collection('cartera').doc(debt.id);
+  const remaining = safeNumber(debt.valorPendiente) - pay;
+  if (debt.origen === 'facturacion') {
+    const saleRef = db.collection('ventas').doc();
+    batch.set(saleRef, {
+      tipo:'abono', isAbono:true, facturaNumero: debt.facturaNumero || null,
+      clienteNombre: debt.clienteNombre, clienteId: debt.clienteId || null,
+      descripcion: `Abono cartera: ${debt.descripcion || ''}`,
+      totalFactura: pay, totalPagado: pay, valor: pay, formaPago: method,
+      pagos:[{ metodo: method, monto: pay }], fecha: serverNow(), createdAt: serverNow(), origen:'abono-cartera', creadoPor: currentUser.email
+    });
+  } else {
+    const regRef = db.collection('registros').doc();
+    batch.set(regRef, {
+      tipo:'abono', isAbono:true, clienteNombre: debt.clienteNombre, clienteId: debt.clienteId || null,
+      descripcion: `Abono cartera: ${debt.descripcion || ''}`, servicioDescripcion: debt.descripcion || 'Abono hospedaje',
+      habitacionId: debt.habitacionId || null, habitacionNombre: debt.habitacionNombre || null,
+      valorTotal: pay, valorPagado: pay, valor: pay, formaPago: method,
+      pagos:[{ metodo: method, monto: pay }], fecha: serverNow(), createdAt: serverNow(), origen:'abono-cartera', creadoPor: currentUser.email
+    });
+  }
+  if (remaining <= 0.0001) batch.delete(debtRef);
+  else batch.set(debtRef, { valorPendiente: remaining, updatedAt: serverNow() }, {merge:true});
+  await batch.commit();
+}
+
+function renderCartera() {
+  let debts = [];
+  setContent(`${sectionIntro('Cartera', 'Saldos pendientes originados en facturación o hospedaje.')}<div class="card"><div id="walletTable"></div></div>`);
+  const render = () => {
+    const total = debts.reduce((s,d)=>s+safeNumber(d.valorPendiente),0);
+    if (!debts.length) { $('#walletTable').innerHTML = `<div class="totalizer"><span>Total pendiente</span><strong>${money(0)}</strong></div>${emptyState('No hay deudas pendientes.')}`; initIcons(); return; }
+    $('#walletTable').innerHTML = `<div class="totalizer"><span>Total pendiente</span><strong>${money(total)}</strong></div><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Descripción</th><th>Origen</th><th>Valor pendiente</th><th>Fecha origen</th><th></th></tr></thead><tbody>
+      ${debts.map(d=>`<tr><td><b>${escapeHtml(d.clienteNombre)}</b></td><td>${escapeHtml(d.descripcion)}</td><td><span class="pill">${escapeHtml(d.origen)}</span></td><td class="amount">${money(d.valorPendiente)}</td><td>${localDateTime(getDocDate(d)||new Date())}</td><td style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-soft btn-sm" data-pay-debt="${d.id}" type="button"><i data-lucide="badge-dollar-sign"></i> Abonar</button><button class="btn btn-success btn-sm" data-settle-debt="${d.id}" type="button"><i data-lucide="check-check"></i> Saldar</button><button class="btn btn-danger btn-sm" data-delete-debt="${d.id}" type="button"><i data-lucide="trash-2"></i> Eliminar deuda</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+    $$('[data-pay-debt]').forEach(btn => btn.addEventListener('click', async () => {
+      const d = debts.find(x => x.id === btn.dataset.payDebt); if (!d) return;
+      const val = prompt(`Valor del abono para ${d.clienteNombre}:`, ''); if (val === null) return;
+      const method = prompt('Forma de pago (Efectivo, Nequi, Transferencia, Tarjeta):', 'Efectivo') || 'Efectivo';
+      try { await registerDebtPayment(d, safeNumber(val), method); toast('Abono registrado'); }
+      catch(err) { showError(err, 'No fue posible registrar abono'); }
+    }));
+    $$('[data-settle-debt]').forEach(btn => btn.addEventListener('click', async () => {
+      const d = debts.find(x => x.id === btn.dataset.settleDebt); if (!d) return;
+      const method = prompt('Forma de pago para saldar:', 'Efectivo') || 'Efectivo';
+      try { await registerDebtPayment(d, safeNumber(d.valorPendiente), method); toast('Deuda saldada'); }
+      catch(err) { showError(err, 'No fue posible saldar'); }
+    }));
+    $$('[data-delete-debt]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirmPassword()) { toast('Contraseña incorrecta.', 'error'); return; }
+      try { await db.collection('cartera').doc(btn.dataset.deleteDebt).delete(); toast('Deuda eliminada sin generar ingreso'); }
+      catch(err) { showError(err, 'No fue posible eliminar'); }
+    }));
+    initIcons();
+  };
+  addUnsub(db.collection('cartera').orderBy('createdAt','desc').onSnapshot(snap => { debts = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+}
+
+/* =========================
+   19. SECCIÓN: DASHBOARD
+   ========================= */
+function renderDashboard() {
+  let ventas = [], compras = [], gastos = [], registros = [], inventario = [], metaDoc = { valor: 0 };
+  setContent(`
+    ${sectionIntro('Dashboard', 'Indicadores comerciales, hoteleros e inventario valorizado.')}
+    <div class="card" style="margin-bottom:16px">${renderDateToolbar('dashboard')}
+      <div class="form-grid two">
+        <div class="field"><label>Meta del mes ($)</label><input id="monthlyGoal" type="number" min="0" step="0.01" placeholder="Ej. 15000000" /></div>
+        <div class="field"><label>Progreso</label><div class="progress"><span id="goalProgress"></span></div><p id="goalText" class="mini"></p></div>
+      </div>
+    </div>
+    <div id="dashboardRoot"></div>
+  `);
+
+  const saveGoal = async () => {
+    try { await db.collection('ajustes').doc('dashboard').set({ metaMensual: safeNumber($('#monthlyGoal').value), updatedAt: serverNow() }, {merge:true}); }
+    catch(err) { showError(err, 'No fue posible guardar la meta'); }
+  };
+  $('#monthlyGoal').addEventListener('blur', saveGoal);
+
+  function sumPaymentsByMethod(records) {
+    const map = {};
+    records.forEach(r => {
+      const pagos = Array.isArray(r.pagos) && r.pagos.length ? r.pagos : [{ metodo: r.formaPago || 'Sin método', monto: safeNumber(r.valor || r.totalPagado || r.valorPagado) }];
+      pagos.forEach(p => map[p.metodo || 'Sin método'] = (map[p.metodo || 'Sin método'] || 0) + safeNumber(p.monto));
+    });
+    return map;
+  }
+
+  function renderCharts(barValues, paymentMap, projection, goal) {
+    Object.values(chartInstances).forEach(ch => { try { ch.destroy(); } catch(e){} });
+    chartInstances = {};
+    const barCtx = $('#barChart');
+    const doughnutCtx = $('#paymentChart');
+    const lineCtx = $('#projectionChart');
+    if (barCtx) chartInstances.bar = new Chart(barCtx, { type:'bar', data:{ labels:['Ventas','Compras','Gastos'], datasets:[{ label:'Valor', data:barValues }] }, options:{ responsive:true, plugins:{ legend:{display:false} } } });
+    if (doughnutCtx) chartInstances.pay = new Chart(doughnutCtx, { type:'doughnut', data:{ labels:Object.keys(paymentMap), datasets:[{ data:Object.values(paymentMap) }] }, options:{ responsive:true } });
+    if (lineCtx) chartInstances.line = new Chart(lineCtx, { type:'line', data:{ labels:['Actual','Proyección','Meta'], datasets:[{ label:'Proyección vs Meta', data:[barValues[0], projection, goal], tension:.35 }] }, options:{ responsive:true } });
+  }
+
+  const render = () => {
+    const start = $('#filterStart').value;
+    const end = $('#filterEnd').value;
+    const ventasF = ventas.filter(v => inDateRange(v,start,end));
+    const comprasF = compras.filter(c => inDateRange(c,start,end));
+    const gastosF = gastos.filter(g => inDateRange(g,start,end));
+    const registrosF = registros.filter(r => inDateRange(r,start,end));
+
+    const totalVentas = ventasF.reduce((s,v)=>s+safeNumber(v.valor || v.totalPagado),0);
+    const totalCompras = comprasF.reduce((s,c)=>s+safeNumber(c.valorTotal),0);
+    const totalGastos = gastosF.reduce((s,g)=>s+safeNumber(g.valor),0);
+    const ingresosEstadia = registrosF.reduce((s,r)=>s+safeNumber(r.valor || r.valorPagado),0);
+    const utilidad = ingresosEstadia + totalVentas - totalCompras - totalGastos;
+    const goal = safeNumber(metaDoc.metaMensual || metaDoc.valor || 0);
+    const goalBase = ingresosEstadia + totalVentas;
+    const pctGoal = goal > 0 ? Math.min((goalBase / goal) * 100, 999) : 0;
+    $('#monthlyGoal').value = goal || '';
+    $('#goalProgress').style.width = Math.min(pctGoal,100).toFixed(2) + '%';
+    $('#goalText').textContent = goal > 0 ? `${pctGoal.toFixed(2)}% alcanzado · ${money(goalBase)} de ${money(goal)}` : 'Ingresa una meta para visualizar el progreso.';
+
+    const units = ventasF.filter(v=>!v.isAbono).flatMap(v=>v.items || []).reduce((s,it)=>s+safeNumber(it.cantidad),0);
+    const invoices = new Set(ventasF.filter(v=>v.facturaNumero).map(v=>v.facturaNumero)).size || ventasF.length;
+    const upt = invoices ? units / invoices : 0;
+    const vpt = invoices ? totalVentas / invoices : 0;
+    const vpu = units ? totalVentas / units : 0;
+
+    const selectedEnd = new Date(end + 'T12:00:00');
+    const day = Math.max(1, selectedEnd.getDate());
+    const projection = (totalVentas / day) * daysInMonth(selectedEnd);
+
+    const serviceMap = {};
+    registrosF.forEach(r => { const key = r.servicioDescripcion || r.descripcion || 'Sin servicio'; serviceMap[key] = (serviceMap[key] || 0) + safeNumber(r.valor || r.valorPagado); });
+    const topServices = Object.entries(serviceMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+    const productUnits = {}, productProfit = {}, productSales = {}, clientSales = {};
+    ventasF.forEach(v => {
+      clientSales[v.clienteNombre || 'General'] = (clientSales[v.clienteNombre || 'General'] || 0) + safeNumber(v.valor || v.totalPagado);
+      if (v.isAbono) return;
+      (v.items || []).forEach(it => {
+        const key = it.descripcion || 'Producto';
+        productUnits[key] = (productUnits[key] || 0) + safeNumber(it.cantidad);
+        productSales[key] = (productSales[key] || 0) + safeNumber(it.total);
+        productProfit[key] = (productProfit[key] || 0) + ((safeNumber(it.pvpUnitario) - safeNumber(it.costoUnitario)) * safeNumber(it.cantidad));
+      });
+    });
+    const invValue = inventario.reduce((s,i)=>s+safeNumber(i.stock)*safeNumber(i.costoUnitario),0);
+    const invQty = inventario.reduce((s,i)=>s+safeNumber(i.stock),0);
+
+    $('#dashboardRoot').innerHTML = `
+      <div class="grid grid-4">
+        ${metricCard('Ingresos de estadía', ingresosEstadia, 'bed-double')}
+        ${metricCard('Total Ventas', totalVentas, 'trending-up')}
+        ${metricCard('Total Compras', totalCompras, 'shopping-bag')}
+        ${metricCard('Total Gastos', totalGastos, 'wallet')}
+      </div>
+      <div class="grid grid-4" style="margin-top:16px">
+        ${metricCard('Utilidad Neta', utilidad, 'badge-dollar-sign')}
+        ${metricCard('Valor inventario', invValue, 'boxes')}
+        ${metricCard('Stock total', invQty, 'package')}
+        ${metricCard('Proyección ventas', projection, 'chart-line')}
+      </div>
+      <div class="grid grid-3" style="margin-top:16px">
+        <div class="card"><h3>Ventas vs Compras vs Gastos</h3><canvas id="barChart"></canvas></div>
+        <div class="card"><h3>Formas de Pago</h3><canvas id="paymentChart"></canvas></div>
+        <div class="card"><h3>Proyección vs Meta</h3><canvas id="projectionChart"></canvas></div>
+      </div>
+      <div class="grid grid-2" style="margin-top:16px">
+        ${simpleTable('5 servicios más rentables', ['Servicio','Valor'], topServices.map(([k,v])=>[k,money(v)]))}
+        ${simpleTable('Indicadores de venta', ['Indicador','Valor'], [['Unidades',units],['Ventas',money(totalVentas)],['Facturas',invoices],['UPT',upt.toFixed(2)],['VPT',money(vpt)],['VPU',money(vpu)]])}
+        ${simpleTable('Top 5 productos más vendidos', ['Producto','Unidades'], Object.entries(productUnits).sort((a,b)=>b[1]-a[1]).slice(0,5))}
+        ${simpleTable('Top 5 productos más rentables', ['Producto','Utilidad'], Object.entries(productProfit).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>[k,money(v)]))}
+        ${simpleTable('Ventas por cliente', ['Cliente','Valor'], Object.entries(clientSales).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([k,v])=>[k,money(v)]))}
+        ${simpleTable('Resumen de inventario', ['Indicador','Valor'], [['Valor total valorizado', money(invValue)], ['Cantidad total en stock', invQty]])}
+      </div>`;
+    initIcons();
+    renderCharts([totalVentas,totalCompras,totalGastos], sumPaymentsByMethod([...ventasF, ...registrosF]), projection, goal);
+  };
+
+  bindDateFilterGuard('dashboard', render);
+  addUnsub(db.collection('ventas').onSnapshot(snap => { ventas = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+  addUnsub(db.collection('compras').onSnapshot(snap => { compras = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+  addUnsub(db.collection('gastos').onSnapshot(snap => { gastos = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+  addUnsub(db.collection('registros').onSnapshot(snap => { registros = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+  addUnsub(db.collection('inventario').onSnapshot(snap => { inventario = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
+  addUnsub(db.collection('ajustes').doc('dashboard').onSnapshot(doc => { metaDoc = doc.exists ? doc.data() : { metaMensual:0 }; render(); }));
+}
+
+function metricCard(title, value, icon) {
+  const display = typeof value === 'number' && !['Stock total'].includes(title) ? money(value) : escapeHtml(value);
+  return `<div class="card metric-card"><div><div class="metric-title">${escapeHtml(title)}</div><div class="metric-value">${display}</div></div><div class="icon-bubble"><i data-lucide="${icon}"></i></div></div>`;
+}
+
+function simpleTable(title, headers, rows) {
+  return `<div class="card"><h3>${escapeHtml(title)}</h3>${rows.length ? `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : emptyState('Sin datos en el rango seleccionado.')}</div>`;
+}
+
+/* =========================
+   20. MAPA DE RENDERIZADO DIFERIDO
+   ========================= */
+const SECTION_RENDERERS = {
+  'dashboard': renderDashboard,
+  'habitaciones': renderHabitaciones,
+  'clientes': renderClientes,
+  'registro-huespedes': renderRegistroHuespedes,
+  'historial-registros': renderHistorialRegistros,
+  'facturacion': renderFacturacion,
+  'ventas': renderVentas,
+  'ingreso-compras': renderIngresoCompras,
+  'historial-compras': renderHistorialCompras,
+  'ingreso-gastos': renderIngresoGastos,
+  'historial-gastos': renderHistorialGastos,
+  'inventario': renderInventario,
+  'productos': renderProductos,
+  'servicios': renderServicios,
+  'cartera': renderCartera
+};
+
+initIcons();
+</script>
+</body>
+</html>
