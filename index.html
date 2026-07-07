@@ -454,6 +454,16 @@ function escapeHtml(text) {
   }[ch]));
 }
 
+// MEJORA #2
+// MEJORA #6
+function normalizeSearchText(text) {
+  return String(text ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 function toast(message, type='success') {
   const wrap = $('#toastWrap');
   const el = document.createElement('div');
@@ -616,6 +626,37 @@ function getPaymentDistribution(method1, amount1, split, method2, amount2) {
   if (safeNumber(amount1) > 0) payments.push({ metodo: method1, monto: safeNumber(amount1) });
   if (split && safeNumber(amount2) > 0) payments.push({ metodo: method2, monto: safeNumber(amount2) });
   return payments;
+}
+
+// MEJORA #3
+// MEJORA #4
+async function deleteProductFromActiveCollections(productId, productName='') {
+  const refs = new Map();
+  const addRef = ref => refs.set(ref.path, ref);
+
+  if (productId) {
+    addRef(db.collection('inventario').doc(productId));
+    addRef(db.collection('productos').doc(productId));
+  }
+
+  const normalizedId = normalizeDocId(productName);
+  if (productName && normalizedId && normalizedId !== productId) {
+    addRef(db.collection('inventario').doc(normalizedId));
+    addRef(db.collection('productos').doc(normalizedId));
+  }
+
+  if (productName) {
+    const [invSnap, prodSnap] = await Promise.all([
+      db.collection('inventario').where('descripcion', '==', productName).get(),
+      db.collection('productos').where('nombre', '==', productName).get()
+    ]);
+    invSnap.forEach(doc => addRef(doc.ref));
+    prodSnap.forEach(doc => addRef(doc.ref));
+  }
+
+  const batch = db.batch();
+  refs.forEach(ref => batch.delete(ref));
+  await batch.commit();
 }
 
 /* =========================
@@ -940,7 +981,12 @@ function renderInventario() {
           <td>${escapeHtml(r.descripcion)}</td>
           <td><b>${safeNumber(r.stock)}</b> ${escapeHtml(r.tipoUnidad || '')}</td>
           <td class="amount">${money(safeNumber(r.stock)*safeNumber(r.costoUnitario))}</td>
-          <td><button class="btn btn-warning btn-sm" data-adjust-stock="${r.id}" type="button"><i data-lucide="sliders-horizontal"></i> Ajustar</button></td>
+          <td>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-warning btn-sm" data-adjust-stock="${r.id}" type="button"><i data-lucide="sliders-horizontal"></i> Ajustar</button>
+              <button class="btn btn-danger btn-sm" data-delete-inventory-product="${r.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button>
+            </div>
+          </td>
         </tr>`).join('')}</tbody></table></div>`;
     $$('[data-adjust-stock]').forEach(btn => btn.addEventListener('click', async () => {
       const row = rows.find(r => r.id === btn.dataset.adjustStock);
@@ -953,6 +999,18 @@ function renderInventario() {
         toast('Inventario ajustado');
       } catch(err) { showError(err, 'No fue posible ajustar'); }
     }));
+
+    // MEJORA #3
+    $$('[data-delete-inventory-product]').forEach(btn => btn.addEventListener('click', async () => {
+      const row = rows.find(r => r.id === btn.dataset.deleteInventoryProduct);
+      if (!row) return;
+      if (!confirm(`¿Eliminar "${row.descripcion}" de Inventario y Productos?`)) return;
+      try {
+        await deleteProductFromActiveCollections(row.id, row.descripcion);
+        toast('Producto eliminado de Inventario y Productos');
+      } catch(err) { showError(err, 'No fue posible eliminar el producto'); }
+    }));
+
     initIcons();
   }));
 }
@@ -978,19 +1036,21 @@ function renderProductos() {
     const rows = inventory.filter(x => x.tipoProducto === 'Producto Venta').sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
     if (!rows.length) { $('#productsTable').innerHTML = emptyState('Los productos aparecen cuando existan en inventario.'); initIcons(); return; }
     $('#productsTable').innerHTML = `<div class="table-wrap"><table>
-      <thead><tr><th>Nombre del Producto</th><th>Costo Unitario</th><th>PVP</th><th>Margen $</th><th>Margen %</th></tr></thead>
+      <thead><tr><th>Nombre del Producto</th><th>Costo Unitario</th><th>PVP</th><th>Margen $</th><th>Margen %</th><th></th></tr></thead>
       <tbody>${rows.map(r=>{
         const prod = productDocs[r.id] || {};
         const costo = safeNumber(r.costoUnitario);
         const pvp = safeNumber(prod.pvp);
         const margen = pvp - costo;
-        const pct = pvp > 0 ? (margen / pvp) * 100 : 0;
+        // MEJORA #5
+        const pct = pvp > 0 ? ((pvp - costo) / pvp) * 100 : 0;
         return `<tr data-product-row="${r.id}">
           <td>${escapeHtml(r.descripcion)}</td>
           <td class="amount">${money(costo)}</td>
           <td><div style="display:flex;align-items:center;gap:8px"><input class="pvp-input" data-id="${r.id}" data-costo="${costo}" value="${pvp || ''}" type="number" min="0" step="0.01" placeholder="0" style="max-width:160px" /><span class="check-save">✓</span></div></td>
           <td class="amount margin-money">${money(margen)}</td>
           <td class="amount margin-pct">${pct.toFixed(2)}%</td>
+          <td><button class="btn btn-danger btn-sm" data-delete-product="${r.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td>
         </tr>`;
       }).join('')}</tbody></table></div>`;
     $$('.pvp-input').forEach(input => {
@@ -1000,7 +1060,8 @@ function renderProductos() {
         const costo = safeNumber(input.dataset.costo);
         const margen = pvp - costo;
         row.querySelector('.margin-money').textContent = money(margen);
-        row.querySelector('.margin-pct').textContent = pvp > 0 ? ((margen / pvp) * 100).toFixed(2) + '%' : '0.00%';
+        // MEJORA #5
+        row.querySelector('.margin-pct').textContent = pvp > 0 ? (((pvp - costo) / pvp) * 100).toFixed(2) + '%' : '0.00%';
       };
       input.addEventListener('input', () => {
         updateMargins();
@@ -1009,6 +1070,18 @@ function renderProductos() {
       });
       input.addEventListener('blur', () => savePvp(input.dataset.id, input.value, row));
     });
+
+    // MEJORA #4
+    $$('[data-delete-product]').forEach(btn => btn.addEventListener('click', async () => {
+      const row = rows.find(r => r.id === btn.dataset.deleteProduct);
+      if (!row) return;
+      if (!confirm(`¿Eliminar "${row.descripcion}" de Productos e Inventario?`)) return;
+      try {
+        await deleteProductFromActiveCollections(row.id, row.descripcion);
+        toast('Producto eliminado de Productos e Inventario');
+      } catch(err) { showError(err, 'No fue posible eliminar el producto'); }
+    }));
+    initIcons();
   };
 
   addUnsub(db.collection('inventario').onSnapshot(snap => { inventory = snap.docs.map(doc => ({ id:doc.id, ...doc.data() })); render(); }));
@@ -1078,6 +1151,7 @@ function renderHistorialGastos() {
    ========================= */
 function renderClientes() {
   let editingId = null;
+  let clients = [];
   setContent(`
     ${sectionIntro('Clientes', 'Crea y administra la base de clientes.')}
     <div class="card">
@@ -1092,7 +1166,15 @@ function renderClientes() {
         <button id="cancelClientEdit" class="btn btn-soft hidden" type="button">Cancelar edición</button>
       </div>
     </div>
-    <div class="card" style="margin-top:16px"><div id="clientsTable"></div></div>
+    <div class="card" style="margin-top:16px">
+      <div class="toolbar">
+        <div class="field" style="min-width:min(100%,360px)">
+          <label>Buscar cliente</label>
+          <input id="clientSearch" type="search" placeholder="Buscar por nombre o cédula..." autocomplete="off" />
+        </div>
+      </div>
+      <div id="clientsTable"></div>
+    </div>
   `);
   const clear = () => { editingId=null; $('#clientName').value=''; $('#clientCedula').value=''; $('#clientPhone').value=''; $('#clientNote').value=''; $('#saveClient').innerHTML='<i data-lucide="save"></i> Guardar cliente'; $('#cancelClientEdit').classList.add('hidden'); initIcons(); };
   $('#cancelClientEdit').addEventListener('click', clear);
@@ -1107,11 +1189,23 @@ function renderClientes() {
       clear();
     } catch(err) { showError(err, 'No fue posible guardar el cliente'); }
   });
-  addUnsub(db.collection('clientes').onSnapshot(snap => {
-    const clients = snap.docs.map(doc => ({id:doc.id, ...doc.data()})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
-    if (!clients.length) { $('#clientsTable').innerHTML = emptyState('No hay clientes registrados.'); initIcons(); return; }
+
+  // MEJORA #2
+  const renderClientsTable = () => {
+    const search = normalizeSearchText($('#clientSearch')?.value || '');
+    const filtered = clients.filter(c => {
+      const haystack = normalizeSearchText(`${c.nombre || ''} ${c.cedula || ''}`);
+      return !search || haystack.includes(search);
+    });
+
+    if (!filtered.length) {
+      $('#clientsTable').innerHTML = emptyState(clients.length ? 'No hay clientes que coincidan con la búsqueda.' : 'No hay clientes registrados.');
+      initIcons();
+      return;
+    }
+
     $('#clientsTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Cédula</th><th>Celular</th><th>Nota</th><th></th></tr></thead><tbody>
-      ${clients.map(c=>`<tr><td><b>${escapeHtml(c.nombre)}</b></td><td>${escapeHtml(c.cedula||'-')}</td><td>${escapeHtml(c.celular||'-')}</td><td>${escapeHtml(c.nota||'-')}</td><td style="display:flex;gap:8px"><button class="btn btn-soft btn-sm" data-edit-client="${c.id}" type="button"><i data-lucide="pencil"></i> Editar</button><button class="btn btn-danger btn-sm" data-delete-client="${c.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
+      ${filtered.map(c=>`<tr><td><b>${escapeHtml(c.nombre)}</b></td><td>${escapeHtml(c.cedula||'-')}</td><td>${escapeHtml(c.celular||'-')}</td><td>${escapeHtml(c.nota||'-')}</td><td style="display:flex;gap:8px"><button class="btn btn-soft btn-sm" data-edit-client="${c.id}" type="button"><i data-lucide="pencil"></i> Editar</button><button class="btn btn-danger btn-sm" data-delete-client="${c.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
     </tbody></table></div>`;
     $$('[data-edit-client]').forEach(btn => btn.addEventListener('click', () => {
       const c = clients.find(x => x.id === btn.dataset.editClient);
@@ -1131,6 +1225,12 @@ function renderClientes() {
       catch(err) { showError(err, 'No fue posible eliminar'); }
     }));
     initIcons();
+  };
+
+  $('#clientSearch').addEventListener('input', renderClientsTable);
+  addUnsub(db.collection('clientes').onSnapshot(snap => {
+    clients = snap.docs.map(doc => ({id:doc.id, ...doc.data()})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+    renderClientsTable();
   }));
 }
 
@@ -1277,7 +1377,7 @@ function renderFacturacion() {
       if (debt > 0 || totalReceived <= 0) {
         const debtRef = db.collection('cartera').doc();
         batch.set(debtRef, {
-          clienteNombre, clienteId: selectedClient?.id || null,
+          clienteNombre, clienteId: selectedClient?.id || null, cedula: selectedClient?.cedula || '',
           descripcion: items.map(i => `${i.descripcion} x${i.cantidad}`).join(', '),
           valorPendiente: debt > 0 ? debt : total, valorOriginal: total, origen:'facturacion', facturaNumero, facturaId: invoiceRef.id,
           items, fecha: serverNow(), createdAt: serverNow()
@@ -1480,37 +1580,156 @@ function renderHabitaciones() {
   const interval = setInterval(renderRooms, 30000); activeIntervals.push(interval);
 }
 
+// MEJORA #1
 async function openRoomPanel(room) {
   const stay = room.estadiaActiva || {};
+  let services = [];
+
+  try {
+    const servicesSnap = await db.collection('servicios').get();
+    services = servicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
+  } catch(err) {
+    showError(err, 'No fue posible cargar servicios para renovación');
+  }
+
+  const serviceOptions = services.length
+    ? services.map(s => `<option value="${s.id}" ${s.id === stay.servicioId ? 'selected' : ''}>${escapeHtml(s.descripcion)} · ${money(s.valor)}</option>`).join('')
+    : '<option value="">No hay servicios disponibles</option>';
+
   modal(`
     <h3>Habitación ${escapeHtml(room.nombre)}</h3>
-    <p class="muted">Estado actual de la estadía</p>
+    <p class="muted">Ficha actual del huésped</p>
     <div class="grid" style="margin-top:14px">
-      <div class="notice"><b>Cliente:</b> ${escapeHtml(stay.clienteNombre || '-')}<br><b>Cédula:</b> ${escapeHtml(stay.cedula || '-')}<br><b>Servicio:</b> ${escapeHtml(stay.servicioDescripcion || '-')}<br><b>Tiempo:</b> ${escapeHtml(formatRemaining(room))}</div>
+      <div class="notice">
+        <b>Nombre del cliente:</b> ${escapeHtml(stay.clienteNombre || '-')}<br>
+        <b>Servicio adquirido:</b> ${escapeHtml(stay.servicioDescripcion || '-')}<br>
+        <b>Tiempo restante:</b> <span id="roomModalRemaining">${escapeHtml(formatRemaining(room))}</span>
+      </div>
     </div>
+
+    <div id="renewalPanel" class="hidden" style="margin-top:16px">
+      <div class="notice" style="margin-bottom:14px"><b>Renovación de estadía</b><br><span class="mini">Selecciona el servicio, registra el pago y confirma para actualizar la habitación.</span></div>
+      <div class="form-grid two">
+        <div class="field full">
+          <label>Tipo de estadía a renovar</label>
+          <select id="renewService">${serviceOptions}</select>
+        </div>
+        <div class="field"><label>Fecha y hora</label><input id="renewDateTime" class="live-now" readonly /></div>
+        <div class="field"><label>Valor del servicio</label><input id="renewValue" readonly /></div>
+        <div class="field"><label>Forma de pago</label><select id="renewPayment1">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="field"><label>Monto recibido</label><input id="renewReceived1" type="number" min="0" step="0.01" placeholder="Vacío = cartera" /></div>
+        <div class="field"><label>Pago dividido</label><label class="pill" style="justify-content:center"><input id="renewSplit" type="checkbox" style="width:auto" /> Activar segundo pago</label></div>
+        <div class="field split-renew hidden"><label>Segundo método</label><select id="renewPayment2">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="field split-renew hidden"><label>Monto segundo método</label><input id="renewReceived2" type="number" min="0" step="0.01" /></div>
+        <div class="field full"><label>Cambio / saldo</label><input id="renewChange" readonly /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-success" id="confirmRenewal" type="button"><i data-lucide="save"></i> Confirmar renovación</button>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-soft" id="closeRoomModal" type="button">Cerrar</button>
-      <button class="btn btn-warning" id="renewStay" type="button"><i data-lucide="refresh-cw"></i> Renovar estadía</button>
+      <button class="btn btn-warning" id="renewStay" type="button"><i data-lucide="refresh-cw"></i> Renovar</button>
       <button class="btn btn-success" id="releaseRoom" type="button"><i data-lucide="door-open"></i> Liberar habitación</button>
     </div>
   `);
+
+  setupLiveClock($('#modalRoot'));
+
+  const updateRoomRemaining = () => {
+    const el = $('#roomModalRemaining');
+    if (el) el.textContent = formatRemaining(room);
+  };
+  updateRoomRemaining();
+  activeIntervals.push(setInterval(updateRoomRemaining, 1000));
+
+  const getRenewService = () => services.find(s => s.id === $('#renewService')?.value);
+  const calcRenewal = () => {
+    const service = getRenewService();
+    const total = service ? safeNumber(service.valor) : 0;
+    const received1 = $('#renewReceived1')?.value === '' ? 0 : safeNumber($('#renewReceived1')?.value);
+    const received2 = $('#renewSplit')?.checked ? safeNumber($('#renewReceived2')?.value) : 0;
+    const diff = received1 + received2 - total;
+    if ($('#renewValue')) $('#renewValue').value = service ? total.toFixed(2) : '';
+    if ($('#renewChange')) $('#renewChange').value = diff >= 0 ? `Cambio ${money(diff)}` : `Saldo ${money(diff)}`;
+  };
+
   $('#closeRoomModal').addEventListener('click', closeModal);
   $('#releaseRoom').addEventListener('click', async () => {
     try { await db.collection('habitaciones').doc(room.id).set({ estado:'libre', estadiaActiva: null, updatedAt: serverNow() }, {merge:true}); closeModal(); toast('Habitación liberada'); }
     catch(err) { showError(err, 'No fue posible liberar habitación'); }
   });
-  $('#renewStay').addEventListener('click', async () => {
-    try {
-      const serviceDoc = stay.servicioId ? await db.collection('servicios').doc(stay.servicioId).get() : null;
-      const service = serviceDoc?.exists ? serviceDoc.data() : { tipoTiempo: stay.tipoTiempo, horas: stay.horas, horaSalida: stay.horaSalida };
-      const exit = calculateExitDate(service, new Date());
-      await db.collection('habitaciones').doc(room.id).set({
-        estadiaActiva: { ...stay, checkIn: serverNow(), expiresAt: firebase.firestore.Timestamp.fromDate(exit), renovadaAt: serverNow() },
-        updatedAt: serverNow()
-      }, {merge:true});
-      closeModal(); toast('Estadía renovada');
-    } catch(err) { showError(err, 'No fue posible renovar'); }
+
+  $('#renewStay').addEventListener('click', () => {
+    $('#renewalPanel').classList.toggle('hidden');
+    calcRenewal();
   });
+
+  $('#renewService').addEventListener('change', calcRenewal);
+  ['renewReceived1','renewReceived2'].forEach(id => $('#' + id).addEventListener('input', calcRenewal));
+  $('#renewSplit').addEventListener('change', () => {
+    $$('.split-renew').forEach(el=>el.classList.toggle('hidden', !$('#renewSplit').checked));
+    calcRenewal();
+  });
+
+  $('#confirmRenewal').addEventListener('click', async () => {
+    const service = getRenewService();
+    if (!service) { toast('Selecciona un servicio para renovar.', 'error'); return; }
+
+    try {
+      const total = safeNumber(service.valor);
+      const amount1 = $('#renewReceived1').value === '' ? 0 : safeNumber($('#renewReceived1').value);
+      const amount2 = $('#renewSplit').checked ? safeNumber($('#renewReceived2').value) : 0;
+      const received = amount1 + amount2;
+      const paid = Math.min(received, total);
+      const debt = Math.max(total - received, 0);
+      const payments = getPaymentDistribution($('#renewPayment1').value, amount1, $('#renewSplit').checked, $('#renewPayment2').value, amount2);
+      const exit = calculateExitDate(service, new Date());
+      if (!exit) throw new Error('No fue posible calcular la hora de salida del servicio seleccionado.');
+
+      const clienteNombre = stay.clienteNombre || 'Sin nombre';
+      const cedula = stay.cedula || '';
+      const batch = db.batch();
+      const registroRef = db.collection('registros').doc();
+      const roomRef = db.collection('habitaciones').doc(room.id);
+
+      batch.set(registroRef, {
+        tipo:'renovacion', clienteNombre, clienteId: stay.clienteId || null, cedula,
+        servicioId: service.id, servicioDescripcion: service.descripcion, habitacionId: room.id, habitacionNombre: room.nombre,
+        valorTotal: total, valorPagado: paid, valor: paid, saldoPendiente: debt,
+        formaPago: $('#renewPayment1').value, pagoDividido: $('#renewSplit').checked, pagos: payments,
+        fecha: serverNow(), createdAt: serverNow(), origen:'renovacion-hospedaje', creadoPor: currentUser.email
+      });
+
+      if (debt > 0 || received <= 0) {
+        const debtRef = db.collection('cartera').doc();
+        batch.set(debtRef, {
+          clienteNombre, clienteId: stay.clienteId || null, cedula,
+          descripcion: service.descripcion, valorPendiente: debt > 0 ? debt : total, valorOriginal: total,
+          origen:'renovacion-hospedaje', servicioId: service.id, habitacionId: room.id, habitacionNombre: room.nombre,
+          registroId: registroRef.id, fecha: serverNow(), createdAt: serverNow()
+        });
+      }
+
+      batch.set(roomRef, {
+        estado:'ocupada', updatedAt: serverNow(),
+        estadiaActiva: {
+          clienteNombre, clienteId: stay.clienteId || null, cedula, servicioId: service.id,
+          servicioDescripcion: service.descripcion, valor: total, checkIn: serverNow(), expiresAt: firebase.firestore.Timestamp.fromDate(exit),
+          tipoTiempo: service.tipoTiempo, horas: service.horas || null, horaSalida: service.horaSalida || null,
+          registroId: registroRef.id, renovadaAt: serverNow()
+        }
+      }, { merge:true });
+
+      await batch.commit();
+      closeModal();
+      toast('Renovación registrada y habitación actualizada');
+    } catch(err) { showError(err, 'No fue posible confirmar la renovación'); }
+  });
+
+  calcRenewal();
 }
 
 /* =========================
@@ -1593,7 +1812,7 @@ function renderRegistroHuespedes() {
       if (debt > 0 || received <= 0) {
         const debtRef = db.collection('cartera').doc();
         batch.set(debtRef, {
-          clienteNombre, clienteId: selectedClient?.id || null, descripcion: service.descripcion,
+          clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(), descripcion: service.descripcion,
           valorPendiente: debt > 0 ? debt : total, valorOriginal: total, origen:'hospedaje', servicioId: service.id,
           habitacionId: room.id, habitacionNombre: room.nombre, fecha: serverNow(), createdAt: serverNow()
         });
@@ -1655,7 +1874,7 @@ async function registerDebtPayment(debt, amount, method) {
     const saleRef = db.collection('ventas').doc();
     batch.set(saleRef, {
       tipo:'abono', isAbono:true, facturaNumero: debt.facturaNumero || null,
-      clienteNombre: debt.clienteNombre, clienteId: debt.clienteId || null,
+      clienteNombre: debt.clienteNombre, clienteId: debt.clienteId || null, cedula: debt.cedula || '',
       descripcion: `Abono cartera: ${debt.descripcion || ''}`,
       totalFactura: pay, totalPagado: pay, valor: pay, formaPago: method,
       pagos:[{ metodo: method, monto: pay }], fecha: serverNow(), createdAt: serverNow(), origen:'abono-cartera', creadoPor: currentUser.email
@@ -1663,7 +1882,7 @@ async function registerDebtPayment(debt, amount, method) {
   } else {
     const regRef = db.collection('registros').doc();
     batch.set(regRef, {
-      tipo:'abono', isAbono:true, clienteNombre: debt.clienteNombre, clienteId: debt.clienteId || null,
+      tipo:'abono', isAbono:true, clienteNombre: debt.clienteNombre, clienteId: debt.clienteId || null, cedula: debt.cedula || '',
       descripcion: `Abono cartera: ${debt.descripcion || ''}`, servicioDescripcion: debt.descripcion || 'Abono hospedaje',
       habitacionId: debt.habitacionId || null, habitacionNombre: debt.habitacionNombre || null,
       valorTotal: pay, valorPagado: pay, valor: pay, formaPago: method,
@@ -1677,12 +1896,44 @@ async function registerDebtPayment(debt, amount, method) {
 
 function renderCartera() {
   let debts = [];
-  setContent(`${sectionIntro('Cartera', 'Saldos pendientes originados en facturación o hospedaje.')}<div class="card"><div id="walletTable"></div></div>`);
+  let clients = [];
+  setContent(`
+    ${sectionIntro('Cartera', 'Saldos pendientes originados en facturación o hospedaje.')}
+    <div class="card">
+      <div class="toolbar">
+        <div class="field" style="min-width:min(100%,360px)">
+          <label>Buscar en cartera</label>
+          <input id="walletSearch" type="search" placeholder="Buscar por nombre o cédula..." autocomplete="off" />
+        </div>
+      </div>
+      <div id="walletTable"></div>
+    </div>
+  `);
+
+  const getDebtCedula = debt => {
+    if (debt.cedula) return debt.cedula;
+    const client = clients.find(c => c.id === debt.clienteId);
+    return client?.cedula || '';
+  };
+
+  // MEJORA #6
   const render = () => {
-    const total = debts.reduce((s,d)=>s+safeNumber(d.valorPendiente),0);
-    if (!debts.length) { $('#walletTable').innerHTML = `<div class="totalizer"><span>Total pendiente</span><strong>${money(0)}</strong></div>${emptyState('No hay deudas pendientes.')}`; initIcons(); return; }
-    $('#walletTable').innerHTML = `<div class="totalizer"><span>Total pendiente</span><strong>${money(total)}</strong></div><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Descripción</th><th>Origen</th><th>Valor pendiente</th><th>Fecha origen</th><th></th></tr></thead><tbody>
-      ${debts.map(d=>`<tr><td><b>${escapeHtml(d.clienteNombre)}</b></td><td>${escapeHtml(d.descripcion)}</td><td><span class="pill">${escapeHtml(d.origen)}</span></td><td class="amount">${money(d.valorPendiente)}</td><td>${localDateTime(getDocDate(d)||new Date())}</td><td style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-soft btn-sm" data-pay-debt="${d.id}" type="button"><i data-lucide="badge-dollar-sign"></i> Abonar</button><button class="btn btn-success btn-sm" data-settle-debt="${d.id}" type="button"><i data-lucide="check-check"></i> Saldar</button><button class="btn btn-danger btn-sm" data-delete-debt="${d.id}" type="button"><i data-lucide="trash-2"></i> Eliminar deuda</button></td></tr>`).join('')}
+    const search = normalizeSearchText($('#walletSearch')?.value || '');
+    const filtered = debts.filter(d => {
+      const cedula = getDebtCedula(d);
+      const haystack = normalizeSearchText(`${d.clienteNombre || ''} ${cedula}`);
+      return !search || haystack.includes(search);
+    });
+    const total = filtered.reduce((s,d)=>s+safeNumber(d.valorPendiente),0);
+
+    if (!filtered.length) {
+      $('#walletTable').innerHTML = `<div class="totalizer"><span>Total pendiente</span><strong>${money(0)}</strong></div>${emptyState(debts.length ? 'No hay deudas que coincidan con la búsqueda.' : 'No hay deudas pendientes.')}`;
+      initIcons();
+      return;
+    }
+
+    $('#walletTable').innerHTML = `<div class="totalizer"><span>Total pendiente</span><strong>${money(total)}</strong></div><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Cédula</th><th>Descripción</th><th>Origen</th><th>Valor pendiente</th><th>Fecha origen</th><th></th></tr></thead><tbody>
+      ${filtered.map(d=>`<tr><td><b>${escapeHtml(d.clienteNombre)}</b></td><td>${escapeHtml(getDebtCedula(d) || '-')}</td><td>${escapeHtml(d.descripcion)}</td><td><span class="pill">${escapeHtml(d.origen)}</span></td><td class="amount">${money(d.valorPendiente)}</td><td>${localDateTime(getDocDate(d)||new Date())}</td><td style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-soft btn-sm" data-pay-debt="${d.id}" type="button"><i data-lucide="badge-dollar-sign"></i> Abonar</button><button class="btn btn-success btn-sm" data-settle-debt="${d.id}" type="button"><i data-lucide="check-check"></i> Saldar</button><button class="btn btn-danger btn-sm" data-delete-debt="${d.id}" type="button"><i data-lucide="trash-2"></i> Eliminar deuda</button></td></tr>`).join('')}
     </tbody></table></div>`;
     $$('[data-pay-debt]').forEach(btn => btn.addEventListener('click', async () => {
       const d = debts.find(x => x.id === btn.dataset.payDebt); if (!d) return;
@@ -1704,6 +1955,9 @@ function renderCartera() {
     }));
     initIcons();
   };
+
+  $('#walletSearch').addEventListener('input', render);
+  addUnsub(db.collection('clientes').onSnapshot(snap => { clients = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
   addUnsub(db.collection('cartera').orderBy('createdAt','desc').onSnapshot(snap => { debts = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
 }
 
@@ -1870,3 +2124,4 @@ initIcons();
 </script>
 </body>
 </html>
+
