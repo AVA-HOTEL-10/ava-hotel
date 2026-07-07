@@ -1842,11 +1842,34 @@ function renderRegistroHuespedes() {
    ========================= */
 function renderHistorialRegistros() {
   let registros = [];
-  setContent(`${sectionIntro('Historial de Registros', 'Historial de ingresos por hospedaje y abonos de cartera.')}<div class="card">${renderDateToolbar('historial-registros')}<div class="totalizer"><span>Total registros filtrados</span><strong id="totalRegistros">${money(0)}</strong></div><div id="registrosTable"></div></div>`);
+  setContent(`
+    ${sectionIntro('Historial de Registros', 'Historial de ingresos por hospedaje y abonos de cartera.')}
+    <div class="card">
+      ${renderDateToolbar('historial-registros')}
+      <div class="toolbar">
+        <div class="field" style="min-width:min(100%,360px)">
+          <label>Buscar registro</label>
+          <input id="recordSearch" type="search" placeholder="Buscar por cédula o nombre..." autocomplete="off" />
+        </div>
+      </div>
+      <div class="totalizer"><span>Total registros filtrados</span><strong id="totalRegistros">${money(0)}</strong></div>
+      <div id="registrosTable"></div>
+    </div>
+  `);
   const render = () => {
-    const filtered = registros.filter(r => inDateRange(r, $('#filterStart').value, $('#filterEnd').value));
+    const start = $('#filterStart').value;
+    const end = $('#filterEnd').value;
+    const search = normalizeSearchText($('#recordSearch')?.value || '');
+    const filtered = registros.filter(r => {
+      const haystack = normalizeSearchText(`${r.cedula || ''} ${r.clienteNombre || ''}`);
+      return inDateRange(r, start, end) && (!search || haystack.includes(search));
+    });
     $('#totalRegistros').textContent = money(filtered.reduce((s,r)=>s+safeNumber(r.valor || r.valorPagado),0));
-    if (!filtered.length) { $('#registrosTable').innerHTML = emptyState(); initIcons(); return; }
+    if (!filtered.length) {
+      $('#registrosTable').innerHTML = emptyState(search ? 'No hay registros que coincidan con la búsqueda.' : 'No hay registros para mostrar.');
+      initIcons();
+      return;
+    }
     $('#registrosTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cliente</th><th>Cédula</th><th>Servicio</th><th>Habitación</th><th>Pago</th><th>Valor</th><th></th></tr></thead><tbody>
       ${filtered.map(r=>`<tr><td>${localDateTime(getDocDate(r)||new Date())}</td><td>${escapeHtml(r.clienteNombre||'-')}</td><td>${escapeHtml(r.cedula||'-')}</td><td>${escapeHtml(r.servicioDescripcion || r.descripcion || '-')}</td><td>${escapeHtml(r.habitacionNombre||'-')}</td><td>${escapeHtml((r.pagos||[]).map(p=>`${p.metodo}: ${money(p.monto)}`).join(' · ') || r.formaPago || '-')}</td><td class="amount">${money(r.valor || r.valorPagado)}</td><td><button class="btn btn-danger btn-sm" data-delete-reg="${r.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
     </tbody></table></div>`;
@@ -1857,6 +1880,7 @@ function renderHistorialRegistros() {
     }));
     initIcons();
   };
+  $('#recordSearch').addEventListener('input', render);
   bindDateFilterGuard('historial-registros', render);
   addUnsub(db.collection('registros').orderBy('createdAt','desc').onSnapshot(snap => { registros = snap.docs.map(doc => ({id:doc.id,...doc.data()})); render(); }));
 }
@@ -2124,4 +2148,3 @@ initIcons();
 </script>
 </body>
 </html>
-
