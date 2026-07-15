@@ -257,6 +257,35 @@
       background:var(--surface); box-shadow:0 -10px 24px rgba(15,23,42,.05);
     }
 
+    /* // MEJORA ACOMPAÑANTES */
+    .companions-toggle {
+      display:flex; align-items:center; gap:10px; width:100%; min-height:48px;
+      padding:12px 14px; border:1px solid var(--line); border-radius:14px;
+      background:var(--surface-2); color:var(--text); cursor:pointer;
+    }
+    .companions-toggle input { width:auto; margin:0; flex:0 0 auto; }
+    .companions-panel {
+      padding:16px; border:1px solid var(--line); border-radius:16px;
+      background:color-mix(in srgb, var(--primary) 5%, var(--surface));
+    }
+    .companions-panel-head {
+      display:flex; justify-content:space-between; align-items:center; gap:12px;
+      margin-bottom:12px; flex-wrap:wrap;
+    }
+    .companions-panel-head h4 { margin:0; font-size:16px; }
+    .companions-list { display:grid; gap:12px; }
+    .companion-row {
+      display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+      gap:12px; align-items:end; padding:14px; border:1px solid var(--line);
+      border-radius:14px; background:var(--surface);
+    }
+    .companions-summary-list { display:grid; gap:8px; }
+    .companion-summary-item {
+      display:flex; justify-content:space-between; align-items:flex-start; gap:14px;
+      padding:10px 12px; border:1px solid var(--line); border-radius:12px;
+      background:var(--surface);
+    }
+
     .progress { height:13px; border-radius:999px; background:var(--surface-2); overflow:hidden; border:1px solid var(--line); }
     .progress > span { display:block; height:100%; width:0%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition:.3s ease; }
 
@@ -286,6 +315,10 @@
       .room-renew-modal { border-radius:18px; }
       .room-modal-header, .room-modal-body, .room-modal-footer { padding-left:16px; padding-right:16px; }
       .room-modal-footer .btn { flex:1 1 calc(50% - 10px); }
+      /* // MEJORA ACOMPAÑANTES */
+      .companion-row { grid-template-columns:1fr; }
+      .companion-row .btn { width:100%; }
+      .companion-summary-item { flex-direction:column; gap:4px; }
     }
   </style>
 </head>
@@ -1615,6 +1648,15 @@ function renderHabitaciones() {
 // MEJORA 2
 async function openRoomPanel(room) {
   const stay = room.estadiaActiva || {};
+
+  // MEJORA ACOMPAÑANTES
+  const acompanantes = (Array.isArray(stay.acompanantes) ? stay.acompanantes : [])
+    .map(item => ({
+      nombreCompleto: String(item?.nombreCompleto || item?.nombre || '').trim(),
+      cedula: String(item?.cedula || '').trim()
+    }))
+    .filter(item => item.nombreCompleto || item.cedula);
+
   let services = [];
 
   try {
@@ -1650,6 +1692,27 @@ async function openRoomPanel(room) {
           <b>Tiempo restante:</b> <span id="roomModalRemaining">${escapeHtml(formatRemaining(room))}</span>
         </div>
       </div>
+
+      <!-- // MEJORA ACOMPAÑANTES -->
+      ${acompanantes.length ? `
+        <div class="companions-panel" style="margin-top:16px">
+          <div class="companions-panel-head">
+            <div>
+              <h4>Acompañantes registrados</h4>
+              <span class="mini">Personas asociadas a la estadía del titular.</span>
+            </div>
+            <span class="pill">${acompanantes.length}</span>
+          </div>
+          <div class="companions-summary-list">
+            ${acompanantes.map(item => `
+              <div class="companion-summary-item">
+                <span><b>${escapeHtml(item.nombreCompleto || '-')}</b></span>
+                <span class="muted">Cédula: ${escapeHtml(item.cedula || '-')}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
 
       <div id="renewalPanel" class="hidden" style="margin-top:16px">
         <div class="notice" style="margin-bottom:14px"><b>Renovación de estadía</b><br><span class="mini">Selecciona el servicio, registra el pago y confirma para actualizar la habitación.</span></div>
@@ -1756,12 +1819,15 @@ async function openRoomPanel(room) {
 
       batch.set(registroRef, {
         tipo:'renovacion', clienteNombre, clienteId: stay.clienteId || null, cedula,
+        // MEJORA ACOMPAÑANTES
+        acompanantes,
         servicioId: service.id, servicioDescripcion: service.descripcion, habitacionId: room.id, habitacionNombre: room.nombre,
         valorTotal: total, valorPagado: paid, valor: paid, saldoPendiente: debt,
         formaPago: $('#renewPayment1').value, pagoDividido: $('#renewSplit').checked, pagos: payments,
         fecha: serverNow(), createdAt: serverNow(), origen:'renovacion-hospedaje', creadoPor: currentUser.email
       });
 
+      // MEJORA ACOMPAÑANTES: Cartera conserva únicamente los datos del titular.
       if (debt > 0 || received <= 0) {
         const debtRef = db.collection('cartera').doc();
         batch.set(debtRef, {
@@ -1776,6 +1842,8 @@ async function openRoomPanel(room) {
         estado:'ocupada', updatedAt: serverNow(),
         estadiaActiva: {
           clienteNombre, clienteId: stay.clienteId || null, cedula, servicioId: service.id,
+          // MEJORA ACOMPAÑANTES
+          acompanantes,
           servicioDescripcion: service.descripcion, valor: total, checkIn: serverNow(), expiresAt: firebase.firestore.Timestamp.fromDate(exit),
           tipoTiempo: service.tipoTiempo, horas: service.horas || null, horaSalida: service.horaSalida || null,
           registroId: registroRef.id, renovadaAt: serverNow()
@@ -1816,11 +1884,76 @@ function renderRegistroHuespedes() {
         <div class="field split-guest hidden"><label>Segundo método</label><select id="guestPayment2">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
         <div class="field split-guest hidden"><label>Monto segundo método</label><input id="guestReceived2" type="number" min="0" step="0.01" /></div>
         <div class="field"><label>Cambio / Saldo</label><input id="guestChange" readonly /></div>
+
+        <!-- // MEJORA ACOMPAÑANTES -->
+        <div class="field full">
+          <label class="companions-toggle" for="guestHasCompanions">
+            <input id="guestHasCompanions" type="checkbox" />
+            <span>¿La persona viene con acompañantes?</span>
+          </label>
+        </div>
       </div>
+
+      <!-- // MEJORA ACOMPAÑANTES -->
+      <div id="guestCompanionsPanel" class="companions-panel hidden" style="margin-top:16px">
+        <div class="companions-panel-head">
+          <div>
+            <h4>Datos de los acompañantes</h4>
+            <span class="mini">Estos datos serán informativos y quedarán asociados únicamente a la estadía del titular.</span>
+          </div>
+          <button id="addGuestCompanion" class="btn btn-soft btn-sm" type="button"><i data-lucide="user-plus"></i> Agregar otro acompañante</button>
+        </div>
+        <div id="guestCompanionsList" class="companions-list"></div>
+      </div>
+
       <button id="saveGuest" class="btn btn-primary" style="margin-top:16px" type="button"><i data-lucide="save"></i> Guardar registro</button>
     </div>
   `);
   setupLiveClock($('#content'));
+
+  // MEJORA ACOMPAÑANTES
+  let companionCounter = 0;
+  const companionsList = $('#guestCompanionsList');
+
+  const addCompanionRow = (data = {}) => {
+    companionCounter += 1;
+    const row = document.createElement('div');
+    row.className = 'companion-row';
+    row.dataset.companionRow = String(companionCounter);
+    row.innerHTML = `
+      <div class="field">
+        <label for="companionName${companionCounter}">Nombre completo</label>
+        <input id="companionName${companionCounter}" data-companion-name autocomplete="off" value="${escapeHtml(data.nombreCompleto || '')}" />
+      </div>
+      <div class="field">
+        <label for="companionCedula${companionCounter}">Número de cédula</label>
+        <input id="companionCedula${companionCounter}" data-companion-cedula autocomplete="off" value="${escapeHtml(data.cedula || '')}" />
+      </div>
+      <button class="btn btn-danger btn-sm" data-remove-companion type="button"><i data-lucide="trash-2"></i> Eliminar</button>
+    `;
+    $('[data-remove-companion]', row).addEventListener('click', () => row.remove());
+    companionsList.appendChild(row);
+    initIcons();
+  };
+
+  const collectCompanions = () => {
+    if (!$('#guestHasCompanions').checked) return { valid:true, acompanantes:[] };
+
+    const rows = $$('.companion-row', companionsList);
+    const acompanantes = rows.map(row => ({
+      nombreCompleto: $('[data-companion-name]', row).value.trim(),
+      cedula: $('[data-companion-cedula]', row).value.trim()
+    }));
+    const valid = acompanantes.length > 0 && acompanantes.every(item => item.nombreCompleto && item.cedula);
+    return { valid, acompanantes };
+  };
+
+  $('#guestHasCompanions').addEventListener('change', () => {
+    const enabled = $('#guestHasCompanions').checked;
+    $('#guestCompanionsPanel').classList.toggle('hidden', !enabled);
+    if (enabled && !$$('.companion-row', companionsList).length) addCompanionRow();
+  });
+  $('#addGuestCompanion').addEventListener('click', () => addCompanionRow());
 
   const updateSelects = () => {
     $('#guestService').innerHTML = `<option value="">Selecciona...</option>` + services.map(s=>`<option value="${s.id}">${escapeHtml(s.descripcion)}</option>`).join('');
@@ -1846,6 +1979,15 @@ function renderRegistroHuespedes() {
     const room = rooms.find(r => r.id === $('#guestRoom').value);
     const clienteNombre = $('#guestName').value.trim();
     if (!clienteNombre || !service || !room) { toast('Completa cliente, servicio y habitación.', 'error'); return; }
+
+    // MEJORA ACOMPAÑANTES
+    const companionData = collectCompanions();
+    if (!companionData.valid) {
+      toast('Completa el nombre y la cédula de cada acompañante, o elimina las filas vacías.', 'error');
+      return;
+    }
+    const acompanantes = companionData.acompanantes;
+
     try {
       const total = safeNumber(service.valor);
       const amount1 = $('#guestReceived1').value === '' ? 0 : safeNumber($('#guestReceived1').value);
@@ -1862,12 +2004,15 @@ function renderRegistroHuespedes() {
         registroRef = db.collection('registros').doc();
         batch.set(registroRef, {
           clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(),
+          // MEJORA ACOMPAÑANTES
+          acompanantes,
           servicioId: service.id, servicioDescripcion: service.descripcion, habitacionId: room.id, habitacionNombre: room.nombre,
           valorTotal: total, valorPagado: paid, valor: paid, saldoPendiente: debt,
           formaPago: $('#guestPayment1').value, pagoDividido: $('#guestSplit').checked, pagos: payments,
           fecha: serverNow(), createdAt: serverNow(), origen:'hospedaje', creadoPor: currentUser.email
         });
       }
+      // MEJORA ACOMPAÑANTES: no se agrega el array a Cartera; la deuda pertenece solo al titular.
       if (debt > 0 || received <= 0) {
         const debtRef = db.collection('cartera').doc();
         batch.set(debtRef, {
@@ -1880,13 +2025,23 @@ function renderRegistroHuespedes() {
         estado:'ocupada', updatedAt: serverNow(),
         estadiaActiva: {
           clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(), servicioId: service.id,
+          // MEJORA ACOMPAÑANTES
+          acompanantes,
           servicioDescripcion: service.descripcion, valor: total, checkIn: serverNow(), expiresAt: firebase.firestore.Timestamp.fromDate(exit),
           tipoTiempo: service.tipoTiempo, horas: service.horas || null, horaSalida: service.horaSalida || null, registroId: registroRef?.id || null
         }
       }, { merge:true });
       await batch.commit();
       toast('Registro guardado');
-      $('#guestName').value=''; $('#guestCedula').value=''; $('#guestService').value=''; $('#guestRoom').value=''; $('#guestReceived1').value=''; $('#guestReceived2').value=''; $('#guestSplit').checked=false; $$('.split-guest').forEach(el=>el.classList.add('hidden')); calc();
+      $('#guestName').value=''; $('#guestCedula').value=''; $('#guestService').value=''; $('#guestRoom').value=''; $('#guestReceived1').value=''; $('#guestReceived2').value=''; $('#guestSplit').checked=false; $$('.split-guest').forEach(el=>el.classList.add('hidden'));
+
+      // MEJORA ACOMPAÑANTES
+      $('#guestHasCompanions').checked = false;
+      $('#guestCompanionsPanel').classList.add('hidden');
+      companionsList.innerHTML = '';
+      companionCounter = 0;
+
+      calc();
     } catch(err) { showError(err, 'No fue posible guardar el registro'); }
   });
 
@@ -2210,4 +2365,3 @@ initIcons();
 </script>
 </body>
 </html>
-
