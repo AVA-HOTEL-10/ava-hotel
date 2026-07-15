@@ -231,6 +231,32 @@
     .modal h3 { margin:0 0 8px; font-size: 23px; }
     .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; flex-wrap:wrap; }
 
+    /* MEJORA 1: botón X y controles visibles para cerrar el modal sin guardar */
+    .room-modal-header {
+      flex:0 0 auto; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
+      padding:18px 22px; border-bottom:1px solid var(--line); background:var(--surface);
+    }
+    .room-modal-header h3 { margin:0 0 4px; }
+    .room-modal-header p { margin:0; }
+    .room-modal-close {
+      width:40px; height:40px; flex:0 0 40px; padding:0; border-radius:12px;
+    }
+
+    /* MEJORA 2: scroll interno con encabezado y acciones siempre visibles */
+    .room-renew-modal {
+      width:min(720px,100%); max-height:calc(100vh - 40px); max-height:calc(100dvh - 40px); padding:0;
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    .room-modal-body {
+      flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+      scrollbar-gutter:stable; padding:20px 22px;
+    }
+    .room-modal-footer {
+      flex:0 0 auto; display:flex; justify-content:flex-end; align-items:center;
+      gap:10px; flex-wrap:wrap; padding:16px 22px; border-top:1px solid var(--line);
+      background:var(--surface); box-shadow:0 -10px 24px rgba(15,23,42,.05);
+    }
+
     .progress { height:13px; border-radius:999px; background:var(--surface-2); overflow:hidden; border:1px solid var(--line); }
     .progress > span { display:block; height:100%; width:0%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition:.3s ease; }
 
@@ -255,6 +281,11 @@
       .form-grid, .form-grid.two, .form-grid.three { grid-template-columns: 1fr; }
       .section-head { flex-direction:column; }
       .user-chip { display:none; }
+
+      /* MEJORA 2: adaptación del modal con scroll para pantallas pequeñas */
+      .room-renew-modal { border-radius:18px; }
+      .room-modal-header, .room-modal-body, .room-modal-footer { padding-left:16px; padding-right:16px; }
+      .room-modal-footer .btn { flex:1 1 calc(50% - 10px); }
     }
   </style>
 </head>
@@ -1580,7 +1611,8 @@ function renderHabitaciones() {
   const interval = setInterval(renderRooms, 30000); activeIntervals.push(interval);
 }
 
-// MEJORA #1
+// MEJORA 1
+// MEJORA 2
 async function openRoomPanel(room) {
   const stay = room.estadiaActiva || {};
   let services = [];
@@ -1598,44 +1630,57 @@ async function openRoomPanel(room) {
     : '<option value="">No hay servicios disponibles</option>';
 
   modal(`
-    <h3>Habitación ${escapeHtml(room.nombre)}</h3>
-    <p class="muted">Ficha actual del huésped</p>
-    <div class="grid" style="margin-top:14px">
-      <div class="notice">
-        <b>Nombre del cliente:</b> ${escapeHtml(stay.clienteNombre || '-')}<br>
-        <b>Servicio adquirido:</b> ${escapeHtml(stay.servicioDescripcion || '-')}<br>
-        <b>Tiempo restante:</b> <span id="roomModalRemaining">${escapeHtml(formatRemaining(room))}</span>
+    <!-- MEJORA 1: encabezado con botón X para cerrar sin guardar -->
+    <div class="room-modal-header">
+      <div>
+        <h3>Habitación ${escapeHtml(room.nombre)}</h3>
+        <p class="muted">Ficha actual del huésped</p>
       </div>
+      <button class="btn btn-soft room-modal-close" id="closeRoomModalX" type="button" aria-label="Cerrar modal" title="Cerrar sin guardar">
+        <i data-lucide="x"></i>
+      </button>
     </div>
 
-    <div id="renewalPanel" class="hidden" style="margin-top:16px">
-      <div class="notice" style="margin-bottom:14px"><b>Renovación de estadía</b><br><span class="mini">Selecciona el servicio, registra el pago y confirma para actualizar la habitación.</span></div>
-      <div class="form-grid two">
-        <div class="field full">
-          <label>Tipo de estadía a renovar</label>
-          <select id="renewService">${serviceOptions}</select>
+    <!-- MEJORA 2: todo el contenido desplazable queda dentro de esta zona -->
+    <div class="room-modal-body">
+      <div class="grid">
+        <div class="notice">
+          <b>Nombre del cliente:</b> ${escapeHtml(stay.clienteNombre || '-')}<br>
+          <b>Servicio adquirido:</b> ${escapeHtml(stay.servicioDescripcion || '-')}<br>
+          <b>Tiempo restante:</b> <span id="roomModalRemaining">${escapeHtml(formatRemaining(room))}</span>
         </div>
-        <div class="field"><label>Fecha y hora</label><input id="renewDateTime" class="live-now" readonly /></div>
-        <div class="field"><label>Valor del servicio</label><input id="renewValue" readonly /></div>
-        <div class="field"><label>Forma de pago</label><select id="renewPayment1">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
-        <div class="field"><label>Monto recibido</label><input id="renewReceived1" type="number" min="0" step="0.01" placeholder="Vacío = cartera" /></div>
-        <div class="field"><label>Pago dividido</label><label class="pill" style="justify-content:center"><input id="renewSplit" type="checkbox" style="width:auto" /> Activar segundo pago</label></div>
-        <div class="field split-renew hidden"><label>Segundo método</label><select id="renewPayment2">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
-        <div class="field split-renew hidden"><label>Monto segundo método</label><input id="renewReceived2" type="number" min="0" step="0.01" /></div>
-        <div class="field full"><label>Cambio / saldo</label><input id="renewChange" readonly /></div>
       </div>
-      <div class="modal-actions">
-        <button class="btn btn-success" id="confirmRenewal" type="button"><i data-lucide="save"></i> Confirmar renovación</button>
+
+      <div id="renewalPanel" class="hidden" style="margin-top:16px">
+        <div class="notice" style="margin-bottom:14px"><b>Renovación de estadía</b><br><span class="mini">Selecciona el servicio, registra el pago y confirma para actualizar la habitación.</span></div>
+        <div class="form-grid two">
+          <div class="field full">
+            <label>Tipo de estadía a renovar</label>
+            <select id="renewService">${serviceOptions}</select>
+          </div>
+          <div class="field"><label>Fecha y hora</label><input id="renewDateTime" class="live-now" readonly /></div>
+          <div class="field"><label>Valor del servicio</label><input id="renewValue" readonly /></div>
+          <div class="field"><label>Forma de pago</label><select id="renewPayment1">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+          <div class="field"><label>Monto recibido</label><input id="renewReceived1" type="number" min="0" step="0.01" placeholder="Vacío = cartera" /></div>
+          <div class="field"><label>Pago dividido</label><label class="pill" style="justify-content:center"><input id="renewSplit" type="checkbox" style="width:auto" /> Activar segundo pago</label></div>
+          <div class="field split-renew hidden"><label>Segundo método</label><select id="renewPayment2">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+          <div class="field split-renew hidden"><label>Monto segundo método</label><input id="renewReceived2" type="number" min="0" step="0.01" /></div>
+          <div class="field full"><label>Cambio / saldo</label><input id="renewChange" readonly /></div>
+        </div>
       </div>
     </div>
 
-    <div class="modal-actions">
-      <button class="btn btn-soft" id="closeRoomModal" type="button">Cerrar</button>
+    <!-- MEJORA 1 y MEJORA 2: acciones fijas y siempre accesibles -->
+    <div class="room-modal-footer">
+      <button class="btn btn-soft" id="closeRoomModal" type="button"><i data-lucide="arrow-left"></i> Regresar / Cancelar</button>
       <button class="btn btn-warning" id="renewStay" type="button"><i data-lucide="refresh-cw"></i> Renovar</button>
+      <button class="btn btn-success hidden" id="confirmRenewal" type="button"><i data-lucide="save"></i> Confirmar renovación</button>
       <button class="btn btn-success" id="releaseRoom" type="button"><i data-lucide="door-open"></i> Liberar habitación</button>
     </div>
   `);
 
+  // MEJORA 2: aplica el diseño con altura limitada y scroll interno solo a este modal.
+  $('#modalRoot .modal')?.classList.add('room-renew-modal');
   setupLiveClock($('#modalRoot'));
 
   const updateRoomRemaining = () => {
@@ -1656,15 +1701,29 @@ async function openRoomPanel(room) {
     if ($('#renewChange')) $('#renewChange').value = diff >= 0 ? `Cambio ${money(diff)}` : `Saldo ${money(diff)}`;
   };
 
+  // MEJORA 1: ambos controles cierran el modal sin ejecutar guardados ni cambios en Firestore.
+  $('#closeRoomModalX').addEventListener('click', closeModal);
   $('#closeRoomModal').addEventListener('click', closeModal);
+
   $('#releaseRoom').addEventListener('click', async () => {
     try { await db.collection('habitaciones').doc(room.id).set({ estado:'libre', estadiaActiva: null, updatedAt: serverNow() }, {merge:true}); closeModal(); toast('Habitación liberada'); }
     catch(err) { showError(err, 'No fue posible liberar habitación'); }
   });
 
   $('#renewStay').addEventListener('click', () => {
-    $('#renewalPanel').classList.toggle('hidden');
+    const renewalPanel = $('#renewalPanel');
+    const opening = renewalPanel.classList.contains('hidden');
+    renewalPanel.classList.toggle('hidden', !opening);
+    $('#confirmRenewal').classList.toggle('hidden', !opening);
+    $('#renewStay').innerHTML = opening
+      ? '<i data-lucide="chevron-up"></i> Ocultar renovación'
+      : '<i data-lucide="refresh-cw"></i> Renovar';
+    initIcons();
     calcRenewal();
+
+    if (opening) {
+      requestAnimationFrame(() => renewalPanel.scrollIntoView({ behavior:'smooth', block:'start' }));
+    }
   });
 
   $('#renewService').addEventListener('change', calcRenewal);
@@ -1927,7 +1986,7 @@ function renderCartera() {
       <div class="toolbar">
         <div class="field" style="min-width:min(100%,360px)">
           <label>Buscar en cartera</label>
-          <input id="walletSearch" type="search" placeholder="Buscar por nombre o cédula..." autocomplete="off" />
+          <input id="walletSearch" type="search" placeholder="Buscar por nombre, apellido o cédula..." autocomplete="off" />
         </div>
       </div>
       <div id="walletTable"></div>
@@ -1940,13 +1999,16 @@ function renderCartera() {
     return client?.cedula || '';
   };
 
-  // MEJORA #6
+  // MEJORA 3: búsqueda por apellido y por nombre/apellido en cualquier orden.
   const render = () => {
-    const search = normalizeSearchText($('#walletSearch')?.value || '');
+    const searchTerms = normalizeSearchText($('#walletSearch')?.value || '')
+      .split(/\s+/)
+      .filter(Boolean);
+
     const filtered = debts.filter(d => {
       const cedula = getDebtCedula(d);
       const haystack = normalizeSearchText(`${d.clienteNombre || ''} ${cedula}`);
-      return !search || haystack.includes(search);
+      return !searchTerms.length || searchTerms.every(term => haystack.includes(term));
     });
     const total = filtered.reduce((s,d)=>s+safeNumber(d.valorPendiente),0);
 
@@ -2148,3 +2210,4 @@ initIcons();
 </script>
 </body>
 </html>
+
