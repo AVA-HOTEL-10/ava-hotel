@@ -1024,36 +1024,59 @@ function renderHistorialCompras() {
 /* =========================
    7. SECCIÓN: INVENTARIO
    ========================= */
+// [MEJORA #1 - INICIO]
 function renderInventario() {
-  setContent(`${sectionIntro('Inventario', 'Productos de venta, stock y valorización automática.')}<div class="card"><div id="inventoryTable"></div></div>`);
-  addUnsub(db.collection('inventario').onSnapshot(snap => {
-    const rows = snap.docs.map(doc => ({id:doc.id, ...doc.data()}))
-      .filter(x => x.tipoProducto === 'Producto Venta')
-      .sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
-    const totalStock = rows.reduce((s,r)=>s+safeNumber(r.stock),0);
-    const totalValue = rows.reduce((s,r)=>s+(safeNumber(r.stock)*safeNumber(r.costoUnitario)),0);
-    if (!rows.length) { $('#inventoryTable').innerHTML = emptyState('Todavía no hay productos de venta en inventario.'); initIcons(); return; }
+  let inventoryRows = [];
+
+  setContent(`
+    ${sectionIntro('Inventario', 'Productos de venta, stock y valorización automática.')}
+    <div class="card">
+      <div class="toolbar">
+        <div class="field" style="min-width:min(100%,420px)">
+          <label>Buscar producto</label>
+          <input id="inventorySearch" type="search" placeholder="Buscar por nombre del producto..." autocomplete="off" />
+        </div>
+      </div>
+      <div id="inventoryTable"></div>
+    </div>
+  `);
+
+  const renderInventory = () => {
+    const search = normalizeSearchText($('#inventorySearch')?.value || '');
+    const filteredRows = inventoryRows.filter(r => !search || normalizeSearchText(r.descripcion || '').includes(search));
+    const totalStock = inventoryRows.reduce((s,r)=>s+safeNumber(r.stock),0);
+    const totalValue = inventoryRows.reduce((s,r)=>s+(safeNumber(r.stock)*safeNumber(r.costoUnitario)),0);
+
+    if (!inventoryRows.length) {
+      $('#inventoryTable').innerHTML = emptyState('Todavía no hay productos de venta en inventario.');
+      initIcons();
+      return;
+    }
+
     $('#inventoryTable').innerHTML = `
       <div class="grid grid-2" style="margin-bottom:16px">
         <div class="card" style="box-shadow:none"><span class="muted">Stock total</span><h3>${totalStock}</h3></div>
         <div class="card" style="box-shadow:none"><span class="muted">Valor inventario</span><h3>${money(totalValue)}</h3></div>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Tipo de Producto</th><th>Descripción</th><th>Stock</th><th>Valor $</th><th></th></tr></thead><tbody>
-      ${rows.map(r=>`
-        <tr>
-          <td><span class="pill green">${escapeHtml(r.tipoProducto)}</span></td>
-          <td>${escapeHtml(r.descripcion)}</td>
-          <td><b>${safeNumber(r.stock)}</b> ${escapeHtml(r.tipoUnidad || '')}</td>
-          <td class="amount">${money(safeNumber(r.stock)*safeNumber(r.costoUnitario))}</td>
-          <td>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-warning btn-sm" data-adjust-stock="${r.id}" type="button"><i data-lucide="sliders-horizontal"></i> Ajustar</button>
-              <button class="btn btn-danger btn-sm" data-delete-inventory-product="${r.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button>
-            </div>
-          </td>
-        </tr>`).join('')}</tbody></table></div>`;
+      ${filteredRows.length ? `
+        <div class="table-wrap"><table><thead><tr><th>Tipo de Producto</th><th>Descripción</th><th>Stock</th><th>Valor $</th><th></th></tr></thead><tbody>
+        ${filteredRows.map(r=>`
+          <tr>
+            <td><span class="pill green">${escapeHtml(r.tipoProducto)}</span></td>
+            <td>${escapeHtml(r.descripcion)}</td>
+            <td><b>${safeNumber(r.stock)}</b> ${escapeHtml(r.tipoUnidad || '')}</td>
+            <td class="amount">${money(safeNumber(r.stock)*safeNumber(r.costoUnitario))}</td>
+            <td>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-warning btn-sm" data-adjust-stock="${r.id}" type="button"><i data-lucide="sliders-horizontal"></i> Ajustar</button>
+                <button class="btn btn-danger btn-sm" data-delete-inventory-product="${r.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button>
+              </div>
+            </td>
+          </tr>`).join('')}</tbody></table></div>
+      ` : emptyState('No hay productos que coincidan con la búsqueda.')}`;
+
     $$('[data-adjust-stock]').forEach(btn => btn.addEventListener('click', async () => {
-      const row = rows.find(r => r.id === btn.dataset.adjustStock);
+      const row = inventoryRows.find(r => r.id === btn.dataset.adjustStock);
       if (!row || !confirmPassword()) { toast('Contraseña incorrecta.', 'error'); return; }
       const value = prompt(`Nuevo stock para ${row.descripcion}:`, safeNumber(row.stock));
       if (value === null) return;
@@ -1066,7 +1089,7 @@ function renderInventario() {
 
     // MEJORA #3
     $$('[data-delete-inventory-product]').forEach(btn => btn.addEventListener('click', async () => {
-      const row = rows.find(r => r.id === btn.dataset.deleteInventoryProduct);
+      const row = inventoryRows.find(r => r.id === btn.dataset.deleteInventoryProduct);
       if (!row) return;
       if (!confirm(`¿Eliminar "${row.descripcion}" de Inventario y Productos?`)) return;
       try {
@@ -1076,8 +1099,17 @@ function renderInventario() {
     }));
 
     initIcons();
+  };
+
+  $('#inventorySearch').addEventListener('input', renderInventory);
+  addUnsub(db.collection('inventario').onSnapshot(snap => {
+    inventoryRows = snap.docs.map(doc => ({id:doc.id, ...doc.data()}))
+      .filter(x => x.tipoProducto === 'Producto Venta')
+      .sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
+    renderInventory();
   }));
 }
+// [MEJORA #1 - FIN]
 
 /* =========================
    8. SECCIÓN: PRODUCTOS
@@ -1504,17 +1536,25 @@ function renderVentas() {
 /* =========================
    14. SECCIÓN: SERVICIOS
    ========================= */
+// [MEJORA #2 - INICIO]
 function renderServicios() {
   let editingId = null;
   setContent(`
-    ${sectionIntro('Servicios', 'Crea servicios de estadía por duración o por hora fija de salida.')}
+    ${sectionIntro('Servicios', 'Crea servicios de estadía y otros servicios que pueden funcionar sin habitación.')}
     <div class="card">
       <div class="form-grid">
-        <div class="field"><label>Descripción</label><input id="serviceDesc" placeholder="Ej. 2 horas, noche, amanecida" /></div>
+        <div class="field"><label>Descripción</label><input id="serviceDesc" placeholder="Ej. Noche, lavado de ropa, aplanchado" /></div>
         <div class="field"><label>Valor ($)</label><input id="serviceValue" type="number" min="0" step="0.01" /></div>
-        <div class="field"><label>Tipo de Tiempo</label><select id="serviceTimeType"><option value="duracion">Por duración</option><option value="horaFija">Hora fija de salida</option></select></div>
-        <div class="field service-duration"><label>Número de horas</label><input id="serviceHours" type="number" min="0" step="0.25" placeholder="2" /></div>
-        <div class="field service-fixed hidden"><label>Hora exacta de salida</label><input id="serviceFixedTime" type="time" /></div>
+        <div class="field">
+          <label>Uso de habitación</label>
+          <select id="serviceRequiresRoom">
+            <option value="true">Requiere habitación</option>
+            <option value="false">No requiere habitación</option>
+          </select>
+        </div>
+        <div class="field service-time-field"><label>Tipo de Tiempo</label><select id="serviceTimeType"><option value="duracion">Por duración</option><option value="horaFija">Hora fija de salida</option></select></div>
+        <div class="field service-time-field service-duration"><label>Número de horas</label><input id="serviceHours" type="number" min="0" step="0.25" placeholder="2" /></div>
+        <div class="field service-time-field service-fixed hidden"><label>Hora exacta de salida</label><input id="serviceFixedTime" type="time" /></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
         <button id="saveService" class="btn btn-primary" type="button"><i data-lucide="save"></i> Guardar servicio</button>
@@ -1523,35 +1563,97 @@ function renderServicios() {
     </div>
     <div class="card" style="margin-top:16px"><div id="servicesTable"></div></div>
   `);
-  const toggleTime = () => { const fixed = $('#serviceTimeType').value === 'horaFija'; $('.service-duration').classList.toggle('hidden', fixed); $('.service-fixed').classList.toggle('hidden', !fixed); };
-  $('#serviceTimeType').addEventListener('change', toggleTime);
-  const clear = () => { editingId=null; $('#serviceDesc').value=''; $('#serviceValue').value=''; $('#serviceTimeType').value='duracion'; $('#serviceHours').value=''; $('#serviceFixedTime').value=''; $('#cancelServiceEdit').classList.add('hidden'); $('#saveService').innerHTML='<i data-lucide="save"></i> Guardar servicio'; toggleTime(); initIcons(); };
+
+  const serviceRequiresRoom = () => $('#serviceRequiresRoom').value !== 'false';
+
+  const toggleServiceFields = () => {
+    const requiresRoom = serviceRequiresRoom();
+    $$('.service-time-field').forEach(el => el.classList.toggle('hidden', !requiresRoom));
+    if (!requiresRoom) return;
+    const fixed = $('#serviceTimeType').value === 'horaFija';
+    $('.service-duration').classList.toggle('hidden', fixed);
+    $('.service-fixed').classList.toggle('hidden', !fixed);
+  };
+
+  $('#serviceRequiresRoom').addEventListener('change', toggleServiceFields);
+  $('#serviceTimeType').addEventListener('change', toggleServiceFields);
+
+  const clear = () => {
+    editingId = null;
+    $('#serviceDesc').value = '';
+    $('#serviceValue').value = '';
+    $('#serviceRequiresRoom').value = 'true';
+    $('#serviceTimeType').value = 'duracion';
+    $('#serviceHours').value = '';
+    $('#serviceFixedTime').value = '';
+    $('#cancelServiceEdit').classList.add('hidden');
+    $('#saveService').innerHTML = '<i data-lucide="save"></i> Guardar servicio';
+    toggleServiceFields();
+    initIcons();
+  };
+
   $('#cancelServiceEdit').addEventListener('click', clear);
   $('#saveService').addEventListener('click', async () => {
     const descripcion = $('#serviceDesc').value.trim();
     const valor = parseMoney($('#serviceValue').value);
-    const tipoTiempo = $('#serviceTimeType').value;
-    const horas = safeNumber($('#serviceHours').value);
-    const horaSalida = $('#serviceFixedTime').value;
-    if (!descripcion || valor <= 0 || (tipoTiempo === 'duracion' && horas <= 0) || (tipoTiempo === 'horaFija' && !horaSalida)) { toast('Completa todos los campos del servicio.', 'error'); return; }
+    const requiereHabitacion = serviceRequiresRoom();
+    const tipoTiempo = requiereHabitacion ? $('#serviceTimeType').value : null;
+    const horas = requiereHabitacion && tipoTiempo === 'duracion' ? safeNumber($('#serviceHours').value) : 0;
+    const horaSalida = requiereHabitacion && tipoTiempo === 'horaFija' ? $('#serviceFixedTime').value : '';
+
+    if (!descripcion || valor <= 0) {
+      toast('Completa la descripción y el valor del servicio.', 'error');
+      return;
+    }
+    if (requiereHabitacion && ((tipoTiempo === 'duracion' && horas <= 0) || (tipoTiempo === 'horaFija' && !horaSalida))) {
+      toast('Completa los datos de tiempo del servicio.', 'error');
+      return;
+    }
+
     try {
-      const data = { descripcion, valor, tipoTiempo, horas, horaSalida, updatedAt: serverNow() };
+      const data = { descripcion, valor, requiereHabitacion, tipoTiempo, horas, horaSalida, updatedAt: serverNow() };
       if (editingId) await db.collection('servicios').doc(editingId).set(data,{merge:true});
       else await db.collection('servicios').add({ ...data, createdAt: serverNow() });
       toast(editingId ? 'Servicio actualizado' : 'Servicio creado');
       clear();
     } catch(err) { showError(err, 'No fue posible guardar'); }
   });
+
   addUnsub(db.collection('servicios').onSnapshot(snap => {
     const services = snap.docs.map(doc => ({id:doc.id,...doc.data()})).sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
     if (!services.length) { $('#servicesTable').innerHTML = emptyState('Crea servicios para usarlos en Registro de Huéspedes.'); initIcons(); return; }
-    $('#servicesTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Valor</th><th>Tiempo</th><th></th></tr></thead><tbody>
-      ${services.map(s=>`<tr><td><b>${escapeHtml(s.descripcion)}</b></td><td>${money(s.valor)}</td><td>${s.tipoTiempo === 'duracion' ? `${s.horas} horas` : `Salida ${escapeHtml(s.horaSalida)}`}</td><td style="display:flex;gap:8px"><button class="btn btn-soft btn-sm" data-edit-service="${s.id}" type="button"><i data-lucide="pencil"></i> Editar</button><button class="btn btn-danger btn-sm" data-delete-service="${s.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td></tr>`).join('')}
+    $('#servicesTable').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Valor</th><th>Habitación</th><th>Tiempo</th><th></th></tr></thead><tbody>
+      ${services.map(s=>{
+        const requiresRoom = s.requiereHabitacion !== false;
+        const timeText = requiresRoom
+          ? (s.tipoTiempo === 'duracion' ? `${safeNumber(s.horas)} horas` : `Salida ${escapeHtml(s.horaSalida || '-')}`)
+          : 'No aplica';
+        return `<tr>
+          <td><b>${escapeHtml(s.descripcion)}</b></td>
+          <td>${money(s.valor)}</td>
+          <td><span class="pill ${requiresRoom ? 'green' : ''}">${requiresRoom ? 'Requiere habitación' : 'No requiere habitación'}</span></td>
+          <td>${timeText}</td>
+          <td style="display:flex;gap:8px"><button class="btn btn-soft btn-sm" data-edit-service="${s.id}" type="button"><i data-lucide="pencil"></i> Editar</button><button class="btn btn-danger btn-sm" data-delete-service="${s.id}" type="button"><i data-lucide="trash-2"></i> Eliminar</button></td>
+        </tr>`;
+      }).join('')}
     </tbody></table></div>`;
+
     $$('[data-edit-service]').forEach(btn => btn.addEventListener('click', () => {
-      const s = services.find(x => x.id === btn.dataset.editService); if (!s) return;
-      editingId=s.id; $('#serviceDesc').value=s.descripcion||''; $('#serviceValue').value=s.valor||''; $('#serviceTimeType').value=s.tipoTiempo||'duracion'; $('#serviceHours').value=s.horas||''; $('#serviceFixedTime').value=s.horaSalida||''; $('#cancelServiceEdit').classList.remove('hidden'); $('#saveService').innerHTML='<i data-lucide="save"></i> Actualizar servicio'; toggleTime(); initIcons();
+      const s = services.find(x => x.id === btn.dataset.editService);
+      if (!s) return;
+      editingId = s.id;
+      $('#serviceDesc').value = s.descripcion || '';
+      $('#serviceValue').value = s.valor || '';
+      $('#serviceRequiresRoom').value = (s.requiereHabitacion !== false) ? 'true' : 'false';
+      $('#serviceTimeType').value = s.tipoTiempo || 'duracion';
+      $('#serviceHours').value = s.horas || '';
+      $('#serviceFixedTime').value = s.horaSalida || '';
+      $('#cancelServiceEdit').classList.remove('hidden');
+      $('#saveService').innerHTML = '<i data-lucide="save"></i> Actualizar servicio';
+      toggleServiceFields();
+      initIcons();
     }));
+
     $$('[data-delete-service]').forEach(btn => btn.addEventListener('click', async () => {
       if (!confirm('¿Eliminar este servicio?')) return;
       try { await db.collection('servicios').doc(btn.dataset.deleteService).delete(); toast('Servicio eliminado'); }
@@ -1559,8 +1661,9 @@ function renderServicios() {
     }));
     initIcons();
   }));
-  toggleTime();
+  toggleServiceFields();
 }
+// [MEJORA #2 - FIN]
 
 /* =========================
    15. SECCIÓN: HABITACIONES
@@ -1661,8 +1764,11 @@ async function openRoomPanel(room) {
 
   try {
     const servicesSnap = await db.collection('servicios').get();
+    // [MEJORA #2 - INICIO]
     services = servicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(service => service.requiereHabitacion !== false)
       .sort((a,b)=>(a.descripcion||'').localeCompare(b.descripcion||''));
+    // [MEJORA #2 - FIN]
   } catch(err) {
     showError(err, 'No fue posible cargar servicios para renovación');
   }
@@ -1862,6 +1968,7 @@ async function openRoomPanel(room) {
 /* =========================
    16. SECCIÓN: REGISTRO DE HUÉSPEDES
    ========================= */
+// [MEJORA #3 - INICIO]
 function renderRegistroHuespedes() {
   let clients = [];
   let services = [];
@@ -1869,13 +1976,13 @@ function renderRegistroHuespedes() {
   let selectedClient = null;
 
   setContent(`
-    ${sectionIntro('Registro de Huéspedes', 'Registra estadías y ocupa habitaciones automáticamente.')}
+    ${sectionIntro('Registro de Huéspedes', 'Registra estadías y servicios adicionales, con habitación solo cuando corresponda.')}
     <div class="card">
       <div class="form-grid">
         <div class="field"><label>Nombre</label><input id="guestName" autocomplete="off" /><div id="guestSuggest" class="suggestions"></div></div>
         <div class="field"><label>Cédula</label><input id="guestCedula" /></div>
-        <div class="field"><label>Tipo de Estadía</label><select id="guestService"><option value="">Selecciona...</option></select></div>
-        <div class="field"><label>Habitación</label><select id="guestRoom"><option value="">Selecciona...</option></select></div>
+        <div class="field"><label>Servicio</label><select id="guestService"><option value="">Selecciona...</option></select></div>
+        <div class="field" id="guestRoomField"><label>Habitación</label><select id="guestRoom"><option value="">Selecciona...</option></select></div>
         <div class="field"><label>Fecha y Hora</label><input class="live-now" readonly /></div>
         <div class="field"><label>Valor</label><input id="guestValue" readonly /></div>
         <div class="field"><label>Forma de Pago</label><select id="guestPayment1">${PAYMENT_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
@@ -1955,19 +2062,35 @@ function renderRegistroHuespedes() {
   });
   $('#addGuestCompanion').addEventListener('click', () => addCompanionRow());
 
+  const getSelectedService = () => services.find(s => s.id === $('#guestService').value);
+  const updateRoomVisibility = () => {
+    const service = getSelectedService();
+    const requiresRoom = !service || service.requiereHabitacion !== false;
+    $('#guestRoomField').classList.toggle('hidden', !!service && !requiresRoom);
+    if (service && !requiresRoom) $('#guestRoom').value = '';
+  };
+
   const updateSelects = () => {
+    const currentService = $('#guestService').value;
+    const currentRoom = $('#guestRoom').value;
     $('#guestService').innerHTML = `<option value="">Selecciona...</option>` + services.map(s=>`<option value="${s.id}">${escapeHtml(s.descripcion)}</option>`).join('');
     $('#guestRoom').innerHTML = `<option value="">Selecciona...</option>` + rooms.filter(r => r.estado !== 'ocupada').map(r=>`<option value="${r.id}">${escapeHtml(r.nombre)}</option>`).join('');
+    if (services.some(s => s.id === currentService)) $('#guestService').value = currentService;
+    if (rooms.some(r => r.id === currentRoom && r.estado !== 'ocupada')) $('#guestRoom').value = currentRoom;
+    updateRoomVisibility();
   };
+
   const calc = () => {
-    const service = services.find(s => s.id === $('#guestService').value);
+    const service = getSelectedService();
     $('#guestValue').value = service ? safeNumber(service.valor).toFixed(2) : '';
     const total = service ? safeNumber(service.valor) : 0;
     const received1 = $('#guestReceived1').value === '' ? 0 : safeNumber($('#guestReceived1').value);
     const received2 = $('#guestSplit').checked ? safeNumber($('#guestReceived2').value) : 0;
     const diff = received1 + received2 - total;
     $('#guestChange').value = diff >= 0 ? `Devuelve ${money(diff)}` : `Pendiente ${money(Math.abs(diff))}`;
+    updateRoomVisibility();
   };
+
   $('#guestService').addEventListener('change', calc);
   ['guestReceived1','guestReceived2'].forEach(id => $('#' + id).addEventListener('input', calc));
   $('#guestSplit').addEventListener('change', () => { $$('.split-guest').forEach(el=>el.classList.toggle('hidden', !$('#guestSplit').checked)); calc(); });
@@ -1975,10 +2098,15 @@ function renderRegistroHuespedes() {
   bindAutocomplete($('#guestName'), $('#guestSuggest'), () => clients, x => x.nombre || '', c => { selectedClient = c; $('#guestName').value = c.nombre; $('#guestCedula').value = c.cedula || ''; });
 
   $('#saveGuest').addEventListener('click', async () => {
-    const service = services.find(s => s.id === $('#guestService').value);
-    const room = rooms.find(r => r.id === $('#guestRoom').value);
+    const service = getSelectedService();
+    const requiresRoom = service ? service.requiereHabitacion !== false : true;
+    const room = requiresRoom ? rooms.find(r => r.id === $('#guestRoom').value) : null;
     const clienteNombre = $('#guestName').value.trim();
-    if (!clienteNombre || !service || !room) { toast('Completa cliente, servicio y habitación.', 'error'); return; }
+
+    if (!clienteNombre || !service || (requiresRoom && !room)) {
+      toast(requiresRoom ? 'Completa cliente, servicio y habitación.' : 'Completa cliente y servicio.', 'error');
+      return;
+    }
 
     // MEJORA ACOMPAÑANTES
     const companionData = collectCompanions();
@@ -1996,9 +2124,10 @@ function renderRegistroHuespedes() {
       const paid = Math.min(received, total);
       const debt = Math.max(total - received, 0);
       const payments = getPaymentDistribution($('#guestPayment1').value, amount1, $('#guestSplit').checked, $('#guestPayment2').value, amount2);
-      const exit = calculateExitDate(service, new Date());
+      const exit = requiresRoom ? calculateExitDate(service, new Date()) : null;
+      if (requiresRoom && !exit) throw new Error('No fue posible calcular la hora de salida del servicio seleccionado.');
+
       const batch = db.batch();
-      const roomRef = db.collection('habitaciones').doc(room.id);
       let registroRef = null;
       if (paid > 0) {
         registroRef = db.collection('registros').doc();
@@ -2006,34 +2135,55 @@ function renderRegistroHuespedes() {
           clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(),
           // MEJORA ACOMPAÑANTES
           acompanantes,
-          servicioId: service.id, servicioDescripcion: service.descripcion, habitacionId: room.id, habitacionNombre: room.nombre,
+          servicioId: service.id, servicioDescripcion: service.descripcion,
+          requiereHabitacion: requiresRoom,
+          habitacionId: requiresRoom ? room.id : null,
+          habitacionNombre: requiresRoom ? room.nombre : null,
           valorTotal: total, valorPagado: paid, valor: paid, saldoPendiente: debt,
           formaPago: $('#guestPayment1').value, pagoDividido: $('#guestSplit').checked, pagos: payments,
-          fecha: serverNow(), createdAt: serverNow(), origen:'hospedaje', creadoPor: currentUser.email
+          fecha: serverNow(), createdAt: serverNow(), origen: requiresRoom ? 'hospedaje' : 'servicio', creadoPor: currentUser.email
         });
       }
+
       // MEJORA ACOMPAÑANTES: no se agrega el array a Cartera; la deuda pertenece solo al titular.
       if (debt > 0 || received <= 0) {
         const debtRef = db.collection('cartera').doc();
         batch.set(debtRef, {
           clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(), descripcion: service.descripcion,
-          valorPendiente: debt > 0 ? debt : total, valorOriginal: total, origen:'hospedaje', servicioId: service.id,
-          habitacionId: room.id, habitacionNombre: room.nombre, fecha: serverNow(), createdAt: serverNow()
+          valorPendiente: debt > 0 ? debt : total, valorOriginal: total,
+          origen: requiresRoom ? 'hospedaje' : 'servicio', servicioId: service.id,
+          requiereHabitacion: requiresRoom,
+          habitacionId: requiresRoom ? room.id : null,
+          habitacionNombre: requiresRoom ? room.nombre : null,
+          fecha: serverNow(), createdAt: serverNow()
         });
       }
-      batch.set(roomRef, {
-        estado:'ocupada', updatedAt: serverNow(),
-        estadiaActiva: {
-          clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(), servicioId: service.id,
-          // MEJORA ACOMPAÑANTES
-          acompanantes,
-          servicioDescripcion: service.descripcion, valor: total, checkIn: serverNow(), expiresAt: firebase.firestore.Timestamp.fromDate(exit),
-          tipoTiempo: service.tipoTiempo, horas: service.horas || null, horaSalida: service.horaSalida || null, registroId: registroRef?.id || null
-        }
-      }, { merge:true });
+
+      if (requiresRoom) {
+        const roomRef = db.collection('habitaciones').doc(room.id);
+        batch.set(roomRef, {
+          estado:'ocupada', updatedAt: serverNow(),
+          estadiaActiva: {
+            clienteNombre, clienteId: selectedClient?.id || null, cedula: $('#guestCedula').value.trim(), servicioId: service.id,
+            // MEJORA ACOMPAÑANTES
+            acompanantes,
+            servicioDescripcion: service.descripcion, valor: total, checkIn: serverNow(), expiresAt: firebase.firestore.Timestamp.fromDate(exit),
+            tipoTiempo: service.tipoTiempo, horas: service.horas || null, horaSalida: service.horaSalida || null, registroId: registroRef?.id || null
+          }
+        }, { merge:true });
+      }
+
       await batch.commit();
-      toast('Registro guardado');
-      $('#guestName').value=''; $('#guestCedula').value=''; $('#guestService').value=''; $('#guestRoom').value=''; $('#guestReceived1').value=''; $('#guestReceived2').value=''; $('#guestSplit').checked=false; $$('.split-guest').forEach(el=>el.classList.add('hidden'));
+      toast(requiresRoom ? 'Registro guardado y habitación ocupada' : 'Servicio registrado sin habitación');
+      selectedClient = null;
+      $('#guestName').value='';
+      $('#guestCedula').value='';
+      $('#guestService').value='';
+      $('#guestRoom').value='';
+      $('#guestReceived1').value='';
+      $('#guestReceived2').value='';
+      $('#guestSplit').checked=false;
+      $$('.split-guest').forEach(el=>el.classList.add('hidden'));
 
       // MEJORA ACOMPAÑANTES
       $('#guestHasCompanions').checked = false;
@@ -2050,14 +2200,16 @@ function renderRegistroHuespedes() {
   addUnsub(db.collection('habitaciones').onSnapshot(snap => { rooms = snap.docs.map(doc => ({id:doc.id,...doc.data()})); updateSelects(); }));
   updateSelects();
 }
+// [MEJORA #3 - FIN]
 
 /* =========================
    17. SECCIÓN: HISTORIAL DE REGISTROS
    ========================= */
 function renderHistorialRegistros() {
   let registros = [];
+  // [MEJORA #3 - INICIO]
   setContent(`
-    ${sectionIntro('Historial de Registros', 'Historial de ingresos por hospedaje y abonos de cartera.')}
+    ${sectionIntro('Historial de Registros', 'Historial de ingresos por servicios, hospedaje y abonos de cartera.')}
     <div class="card">
       ${renderDateToolbar('historial-registros')}
       <div class="toolbar">
@@ -2070,6 +2222,7 @@ function renderHistorialRegistros() {
       <div id="registrosTable"></div>
     </div>
   `);
+  // [MEJORA #3 - FIN]
   const render = () => {
     const start = $('#filterStart').value;
     const end = $('#filterEnd').value;
@@ -2255,10 +2408,12 @@ function renderDashboard() {
     const totalVentas = ventasF.reduce((s,v)=>s+safeNumber(v.valor || v.totalPagado),0);
     const totalCompras = comprasF.reduce((s,c)=>s+safeNumber(c.valorTotal),0);
     const totalGastos = gastosF.reduce((s,g)=>s+safeNumber(g.valor),0);
-    const ingresosEstadia = registrosF.reduce((s,r)=>s+safeNumber(r.valor || r.valorPagado),0);
-    const utilidad = ingresosEstadia + totalVentas - totalCompras - totalGastos;
+    // [MEJORA #3 - INICIO]
+    const ingresosServicios = registrosF.reduce((s,r)=>s+safeNumber(r.valor || r.valorPagado),0);
+    const utilidad = ingresosServicios + totalVentas - totalCompras - totalGastos;
     const goal = safeNumber(metaDoc.metaMensual || metaDoc.valor || 0);
-    const goalBase = ingresosEstadia + totalVentas;
+    const goalBase = ingresosServicios + totalVentas;
+    // [MEJORA #3 - FIN]
     const pctGoal = goal > 0 ? Math.min((goalBase / goal) * 100, 999) : 0;
     $('#monthlyGoal').value = goal || '';
     $('#goalProgress').style.width = Math.min(pctGoal,100).toFixed(2) + '%';
@@ -2292,9 +2447,10 @@ function renderDashboard() {
     const invValue = inventario.reduce((s,i)=>s+safeNumber(i.stock)*safeNumber(i.costoUnitario),0);
     const invQty = inventario.reduce((s,i)=>s+safeNumber(i.stock),0);
 
+    // [MEJORA #3 - INICIO]
     $('#dashboardRoot').innerHTML = `
       <div class="grid grid-4">
-        ${metricCard('Ingresos de estadía', ingresosEstadia, 'bed-double')}
+        ${metricCard('Ingresos por Servicios', ingresosServicios, 'concierge-bell')}
         ${metricCard('Total Ventas', totalVentas, 'trending-up')}
         ${metricCard('Total Compras', totalCompras, 'shopping-bag')}
         ${metricCard('Total Gastos', totalGastos, 'wallet')}
@@ -2318,6 +2474,7 @@ function renderDashboard() {
         ${simpleTable('Ventas por cliente', ['Cliente','Valor'], Object.entries(clientSales).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([k,v])=>[k,money(v)]))}
         ${simpleTable('Resumen de inventario', ['Indicador','Valor'], [['Valor total valorizado', money(invValue)], ['Cantidad total en stock', invQty]])}
       </div>`;
+    // [MEJORA #3 - FIN]
     initIcons();
     renderCharts([totalVentas,totalCompras,totalGastos], sumPaymentsByMethod([...ventasF, ...registrosF]), projection, goal);
   };
